@@ -22,16 +22,16 @@ The game needs no local server because it only loads same-folder images. If you 
 
 ## 2. Roster
 
-Four playable fighters. All four are palette recolors of the same underlying character rig, so they share one frame map and play identically — the choice is cosmetic.
+Four playable fighters. All four are palette recolors of the same underlying character rig and share one frame map — every pose, animation, and hitbox shape is identical across the roster. What's *not* identical is how each one plays: each has its own movement tuning, a passive trait, and a signature variant of the special move, layered entirely through data (no new animations or move systems). The archetype name is shown right on the character-select thumbnail, so the difference is visible before you even pick.
 
-| Sprite sheet | In-game name |
-|---|---|
-| `blue_ronin.png` | **Blue Ronin** |
-| `street_fist.png` | **Street Fist** |
-| `voltage.png` | **Voltage** |
-| `night_ninja.png` | **Night Ninja** |
+| Sprite sheet | In-game name | Archetype | Identity |
+|---|---|---|---|
+| `blue_ronin.png` | **Blue Ronin** | The Bruiser | Slower (8% less walk speed), hits 15% harder in melee, and takes 25% less block-chip damage. Signature special is a heavy, slow projectile: costs more meter (45) and travels slower (420 px/s) but deals the most damage of any special (22). |
+| `street_fist.png` | **Street Fist** | The Rushdown | 10% faster walk speed and a 25%-shorter dash cooldown, at the cost of 10% less melee damage. Gains 25% more meter from landing hits. Signature special is a cheap, fast poke: only 25 meter, 280ms charge, 650 px/s travel, but just 10 damage. |
+| `voltage.png` | **Voltage** | The Zoner | 10% less melee damage (weak up close), but passively regenerates 2 meter/second just by existing — no need to fight for resource. Signature special keeps standard cost/damage but travels at 700 px/s, making it very hard to react to. |
+| `night_ninja.png` | **Night Ninja** | The Technical | Full-speed air control (no penalty from the usual 80% airborne movement cap) and a 5% higher jump. Uniquely, the signature special can be aimed while still walking — every other character is rooted in place during the special's charge, but Night Ninja isn't. Charges faster (300ms) for slightly less damage (14). |
 
-Both sides may pick the same character; mirror matches are allowed.
+Both sides may pick the same character; mirror matches are allowed. None of this touches animations, hitbox *shapes*, or the core rock-paper-scissors geometry from §8 — every character still ducks punches the same way and gets hit by kicks the same way. The differentiation is entirely in speed, timing, and resource numbers.
 
 ---
 
@@ -93,6 +93,8 @@ Sprites are drawn from the shared frame map at 4× scale, anchored **bottom-cent
 ---
 
 ## 7. Movement
+
+The table below is the shared baseline (exactly Voltage's numbers — Voltage carries no movement trait modifiers). Blue Ronin, Street Fist, and Night Ninja each shift a subset of these per §2's roster table; nothing else about movement changes per character.
 
 | Property | Value |
 |---|---|
@@ -172,9 +174,9 @@ Kick's taller hitbox makes it noticeably more forgiving to land while descending
 
 The meter fills to 100 by **landing hits, taking hits, and having attacks blocked** — so both aggression and enduring pressure build toward a special. Attackers gain the most (8 punch / 12 kick / 10 projectile), defenders gain a smaller share for being hit (5–6), and chip meter is awarded on block (3–5).
 
-The special costs **35 meter**, and the cost is deducted **at release, not at charge start**. If you get hit during the 420 ms charge, the charge is cancelled and **no meter is spent** — you lose the tempo, not the resource.
+The special's exact cost, charge time, damage, and travel speed are per-character (see §2's roster table — Voltage's numbers, 35 meter / 420 ms / 16 dmg / 500 px/s, are the baseline every other character's signature deviates from). Whatever the character, the cost is always deducted **at release, not at charge start** — if you get hit during the charge, it's cancelled and **no meter is spent**, so a punished charge costs tempo, not resource.
 
-The projectile spawns at chest height, travels at 500 px/s, and can be blocked, ducked, or simply outrun. It expires after 1200 ms or on leaving the stage.
+The projectile always spawns at chest height and can be blocked, ducked, or simply outrun regardless of character. It expires after 1200 ms or on leaving the stage.
 
 ### Hit feedback
 
@@ -284,4 +286,5 @@ The select screen shows a **live-animating idle-pose preview** of all four chara
 - **Interrupted specials are cheap.** Meter is only spent on release, so a punished charge is a tempo loss rather than a resource loss. This makes the special worth attempting without feeling ruinous.
 - **Draw rounds don't award a win.** A perfectly even timeout advances the round counter without moving the score, so a match with repeated draws will keep playing rounds until someone actually wins two.
 - **Air attacks can't be re-thrown mid-jump.** Once an air attack finishes recovering, the fighter returns to the falling jump state — they can't chain a second one or double-jump out of it.
-- **All four characters are mechanically identical.** The roster is a visual choice; there are no per-character stats, moves, or matchup differences.
+- **Character identity is pure data, not new art.** Every trait (movement multipliers, damage/meter modifiers, the signature special's cost/timing/damage/speed) is a plain number on the character's entry in `SKINS` — no new animations, no new move types, no character-specific code branches scattered through the engine. The one exception is Night Ninja's "keeps moving while charging" trait, which is a single `freeMove` flag read in one place (`updateSpecial`).
+- **The signature special reuses the exact same charge→release→recovery pipeline for every character.** Only the numbers feeding it differ (cost, charge time, damage, projectile speed) — there's no per-character special-move logic to maintain.

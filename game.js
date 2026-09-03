@@ -27,10 +27,42 @@ const ANIM = {
    ROSTER
    ============================================================ */
 const SKINS = [
-  { key:'blue_ronin',  file:'assets/blue_ronin.png',  name:'Blue Ronin' },
-  { key:'street_fist', file:'assets/street_fist.png', name:'Street Fist' },
-  { key:'voltage',     file:'assets/voltage.png',     name:'Voltage' },
-  { key:'night_ninja', file:'assets/night_ninja.png', name:'Night Ninja' },
+  {
+    key:'blue_ronin', file:'assets/blue_ronin.png', name:'Blue Ronin',
+    traits: {
+      archetype: 'THE BRUISER',
+      walkMult: 0.92, dashCooldownMult: 1, jumpMult: 1, airControlMult: 1,
+      dmgMult: 1.15, blockChipMult: 0.75, meterGainOnHitMult: 1, passiveMeterRegen: 0,
+      special: { cost:45, chargeMs:420, releaseMs:130, dmg:22, speed:420, freeMove:false },
+    },
+  },
+  {
+    key:'street_fist', file:'assets/street_fist.png', name:'Street Fist',
+    traits: {
+      archetype: 'THE RUSHDOWN',
+      walkMult: 1.1, dashCooldownMult: 0.75, jumpMult: 1, airControlMult: 1,
+      dmgMult: 0.9, blockChipMult: 1, meterGainOnHitMult: 1.25, passiveMeterRegen: 0,
+      special: { cost:25, chargeMs:280, releaseMs:110, dmg:10, speed:650, freeMove:false },
+    },
+  },
+  {
+    key:'voltage', file:'assets/voltage.png', name:'Voltage',
+    traits: {
+      archetype: 'THE ZONER',
+      walkMult: 1, dashCooldownMult: 1, jumpMult: 1, airControlMult: 1,
+      dmgMult: 0.9, blockChipMult: 1, meterGainOnHitMult: 1, passiveMeterRegen: 2,
+      special: { cost:35, chargeMs:420, releaseMs:130, dmg:16, speed:700, freeMove:false },
+    },
+  },
+  {
+    key:'night_ninja', file:'assets/night_ninja.png', name:'Night Ninja',
+    traits: {
+      archetype: 'THE TECHNICAL',
+      walkMult: 1, dashCooldownMult: 1, jumpMult: 1.05, airControlMult: 1.25,
+      dmgMult: 1, blockChipMult: 1, meterGainOnHitMult: 1, passiveMeterRegen: 0,
+      special: { cost:35, chargeMs:300, releaseMs:130, dmg:14, speed:500, freeMove:true },
+    },
+  },
 ];
 const SKIN_MAP = Object.fromEntries(SKINS.map(s => [s.key, s]));
 const IMAGES = {};
@@ -224,8 +256,8 @@ const KICK_DMG = 12, KICK_STARTUP = 170, KICK_ACTIVE = 90, KICK_RECOVERY = 280;
 const KICK_KNOCKBACK = 220, KICK_HITSTUN = 380;
 const KICK_METER_HIT = 12, KICK_METER_BLOCK = 5, KICK_METER_DEFENDER = 6;
 
-const SPECIAL_COST = 35, SPECIAL_CHARGE = 420, SPECIAL_RELEASE = 130, SPECIAL_RECOVERY = 220;
-const PROJECTILE_DMG = 16, PROJECTILE_SPEED = 500, PROJECTILE_LIFETIME = 1200;
+const SPECIAL_RELEASE = 130, SPECIAL_RECOVERY = 220;
+const PROJECTILE_LIFETIME = 1200;
 const PROJECTILE_METER_HIT = 10;
 
 const BLOCK_DAMAGE_MULT = 0.2, MAX_METER = 100, MAX_HEALTH = 100;
@@ -243,9 +275,8 @@ const AI_REACT_RANGE = 100, AI_DUCK_RANGE = 150, AI_BLOCK_REACTION_CHANCE = 0.5;
 const KEYMAP_P1 = { left:'a', right:'d', up:'w', down:'s', dash:'shift', punch:'j', kick:'k', special:'l' };
 const KEYMAP_P2 = { left:'arrowleft', right:'arrowright', up:'arrowup', down:'arrowdown', dash:'/', punch:'1', kick:'2', special:'3' };
 
-const PUNCH_TABLE = { dmg:PUNCH_DMG, kb:PUNCH_KNOCKBACK, stun:PUNCH_HITSTUN, meterHit:PUNCH_METER_HIT, meterBlock:PUNCH_METER_BLOCK, meterDef:PUNCH_METER_DEFENDER, big:false, hitstop:HITSTOP_LIGHT };
-const KICK_TABLE  = { dmg:KICK_DMG,  kb:KICK_KNOCKBACK,  stun:KICK_HITSTUN,  meterHit:KICK_METER_HIT,  meterBlock:KICK_METER_BLOCK,  meterDef:KICK_METER_DEFENDER,  big:true,  hitstop:HITSTOP_HEAVY };
-const PROJECTILE_TABLE = { dmg:PROJECTILE_DMG, kb:200, stun:320, meterHit:PROJECTILE_METER_HIT, meterBlock:4, meterDef:6, big:true, hitstop:HITSTOP_HEAVY };
+const PUNCH_TABLE = { dmg:PUNCH_DMG, kb:PUNCH_KNOCKBACK, stun:PUNCH_HITSTUN, meterHit:PUNCH_METER_HIT, meterBlock:PUNCH_METER_BLOCK, meterDef:PUNCH_METER_DEFENDER, big:false, hitstop:HITSTOP_LIGHT, type:'punch' };
+const KICK_TABLE  = { dmg:KICK_DMG,  kb:KICK_KNOCKBACK,  stun:KICK_HITSTUN,  meterHit:KICK_METER_HIT,  meterBlock:KICK_METER_BLOCK,  meterDef:KICK_METER_DEFENDER,  big:true,  hitstop:HITSTOP_HEAVY, type:'kick' };
 
 /* ============================================================
    UTIL
@@ -381,6 +412,7 @@ class Fighter {
   constructor(skinKey, x, controlScheme, name){
     this.skinKey = skinKey;
     this.img = IMAGES[skinKey];
+    this.traits = SKIN_MAP[skinKey].traits;
     this.name = name;
     this.controlScheme = controlScheme; // 'p1' | 'p2' | 'ai'
 
@@ -453,7 +485,7 @@ function startSpecial(f){
   f.attackPhase = 'charge';
   f.phaseTimer = 0;
   f.facingLocked = true;
-  f.vx = 0;
+  if (!f.traits.special.freeMove) f.vx = 0; // freeMove characters keep repositioning while they charge
   f.animFrames = ANIM.specialCharge;
   f.animIndex = 0;
 }
@@ -493,14 +525,21 @@ function updateAttack(f, dt){
   }
 }
 
-function updateSpecial(f, dt, g){
+function updateSpecial(f, dt, g, input){
   f.phaseTimer += dt;
+  const st = f.traits.special;
   if (f.attackPhase === 'charge'){
+    if (st.freeMove){
+      if (input.left) f.vx = -WALK_SPEED * f.traits.walkMult;
+      else if (input.right) f.vx = WALK_SPEED * f.traits.walkMult;
+      else f.vx = 0;
+    }
     f.animFrames = ANIM.specialCharge;
-    f.animIndex = Math.min(2, Math.floor(f.phaseTimer / (SPECIAL_CHARGE/3)));
-    if (f.phaseTimer >= SPECIAL_CHARGE){
-      f.meter = Math.max(0, f.meter - SPECIAL_COST);
+    f.animIndex = Math.min(2, Math.floor(f.phaseTimer / (st.chargeMs/3)));
+    if (f.phaseTimer >= st.chargeMs){
+      f.meter = Math.max(0, f.meter - st.cost);
       f.attackPhase = 'release'; f.phaseTimer = 0;
+      f.vx = 0;
       f.animFrames = ANIM.specialRelease; f.animIndex = 0;
       spawnProjectile(f, g);
     }
@@ -519,7 +558,7 @@ function updateSpecial(f, dt, g){
 function tryStartAction(f, input, opp, g){
   if (input.punchPressed){ startAttack(f, 'punch'); return true; }
   if (input.kickPressed){ startAttack(f, 'kick'); return true; }
-  if (input.specialPressed && f.meter >= SPECIAL_COST){ startSpecial(f); return true; }
+  if (input.specialPressed && f.meter >= f.traits.special.cost){ startSpecial(f); return true; }
   return false;
 }
 
@@ -528,7 +567,7 @@ function groundedMovement(f, input, opp, g, dt){
     const dir = input.left ? -1 : input.right ? 1 : f.facing;
     f.state = 'dash';
     f.dashTimer = DASH_DURATION;
-    f.dashCooldownRemaining = DASH_DURATION + DASH_COOLDOWN;
+    f.dashCooldownRemaining = DASH_DURATION + DASH_COOLDOWN * f.traits.dashCooldownMult;
     f.vx = dir * DASH_SPEED;
     f.facingLocked = true;
     f.animFrames = ANIM.dash; f.animIndex = 0; f.animFrameTimer = 0;
@@ -537,7 +576,7 @@ function groundedMovement(f, input, opp, g, dt){
   }
   if (tryStartAction(f, input, opp, g)) return;
   if (input.jumpPressed){
-    f.state = 'jump'; f.vy = JUMP_VELOCITY; f.grounded = false;
+    f.state = 'jump'; f.vy = JUMP_VELOCITY * f.traits.jumpMult; f.grounded = false;
     f.animFrames = ANIM.jump; f.animIndex = 0;
     return;
   }
@@ -546,8 +585,8 @@ function groundedMovement(f, input, opp, g, dt){
     f.animFrames = ANIM.crouch; f.animIndex = 0;
     return;
   }
-  if (input.left){ f.vx = -WALK_SPEED; f.state = 'walk'; }
-  else if (input.right){ f.vx = WALK_SPEED; f.state = 'walk'; }
+  if (input.left){ f.vx = -WALK_SPEED * f.traits.walkMult; f.state = 'walk'; }
+  else if (input.right){ f.vx = WALK_SPEED * f.traits.walkMult; f.state = 'walk'; }
   else { f.vx = 0; f.state = 'idle'; }
   advanceAnim(f, f.state === 'walk' ? ANIM.walk : ANIM.idle, f.state === 'walk' ? 70 : 260, dt, true);
 }
@@ -555,6 +594,9 @@ function groundedMovement(f, input, opp, g, dt){
 function updateFighter(f, input, dt, opp, g){
   if (f.flashTimer > 0) f.flashTimer = Math.max(0, f.flashTimer - dt);
   if (f.dashCooldownRemaining > 0) f.dashCooldownRemaining = Math.max(0, f.dashCooldownRemaining - dt);
+  if (f.traits.passiveMeterRegen && f.state !== 'ko'){
+    f.meter = clamp(f.meter + f.traits.passiveMeterRegen * dt / 1000, 0, MAX_METER);
+  }
   if (!f.facingLocked) f.facing = opp.x >= f.x ? 1 : -1;
 
   // Gravity applies whenever airborne, independent of state — otherwise a
@@ -613,8 +655,9 @@ function updateFighter(f, input, dt, opp, g){
       break;
     }
     case 'jump': {
-      if (input.left) f.vx = -WALK_SPEED * 0.8;
-      else if (input.right) f.vx = WALK_SPEED * 0.8;
+      const airSpeed = WALK_SPEED * f.traits.walkMult * 0.8 * f.traits.airControlMult;
+      if (input.left) f.vx = -airSpeed;
+      else if (input.right) f.vx = airSpeed;
       if (input.punchPressed){ startAttack(f, 'punch'); break; }
       if (input.kickPressed){ startAttack(f, 'kick'); break; }
       f.animFrames = ANIM.jump; f.animIndex = 0;
@@ -632,7 +675,7 @@ function updateFighter(f, input, dt, opp, g){
       updateAttack(f, dt);
       break;
     case 'special':
-      updateSpecial(f, dt, g);
+      updateSpecial(f, dt, g, input);
       break;
     case 'idle':
     case 'walk':
@@ -665,12 +708,16 @@ function kickHitbox(f){
    PROJECTILES / PARTICLES
    ============================================================ */
 function spawnProjectile(f, g){
+  const st = f.traits.special;
   g.projectiles.push({
     x: f.x + f.facing*60,
     y: f.y - 140,
-    vx: f.facing * PROJECTILE_SPEED,
+    vx: f.facing * st.speed,
     owner: f,
     life: PROJECTILE_LIFETIME,
+    // Snapshotting the table per-projectile (rather than a shared PROJECTILE_TABLE constant)
+    // is what lets each character's signature special carry its own damage.
+    table: { dmg:st.dmg, kb:200, stun:320, meterHit:PROJECTILE_METER_HIT, meterBlock:4, meterDef:6, big:true, hitstop:HITSTOP_HEAVY, type:'projectile' },
   });
 }
 
@@ -697,7 +744,7 @@ function updateProjectilesAndParticles(g, step){
       if (defender.state !== 'ko'){
         const hb = { x:pr.x-10, y:pr.y-10, w:20, h:20 };
         if (aabbIntersect(hb, currentHurtbox(defender))){
-          applyHit(pr.owner, defender, PROJECTILE_TABLE, g);
+          applyHit(pr.owner, defender, pr.table, g);
           remove = true;
         }
       }
@@ -727,7 +774,7 @@ function applyHit(attacker, defender, table, g){
   const dir = Math.sign(defender.x - attacker.x) || attacker.facing;
 
   if (defender.state === 'crouch'){
-    const dmg = table.dmg * BLOCK_DAMAGE_MULT;
+    const dmg = table.dmg * BLOCK_DAMAGE_MULT * defender.traits.blockChipMult;
     defender.health = Math.max(0, defender.health - dmg);
     defender.state = 'block';
     defender.blockTimer = 0;
@@ -747,12 +794,12 @@ function applyHit(attacker, defender, table, g){
     defender.facingLocked = true;
     defender.animFrames = ANIM.hurt; defender.animIndex = 0; defender.animFrameTimer = 0;
     defender.flashTimer = HIT_FLASH_MS;
-    attacker.meter = clamp(attacker.meter + table.meterHit, 0, MAX_METER);
+    attacker.meter = clamp(attacker.meter + table.meterHit * attacker.traits.meterGainOnHitMult, 0, MAX_METER);
     defender.meter = clamp(defender.meter + table.meterDef, 0, MAX_METER);
     spawnParticles(g, defender.x - dir*20, defender.y-120, PARTICLE_COUNT);
     if (table.big) g.shakeTimer = SHAKE_MS;
     g.hitStopTimer = Math.max(g.hitStopTimer, table.hitstop);
-    if (table === PUNCH_TABLE) sfxPunch(); else sfxKick();
+    if (table.type === 'punch') sfxPunch(); else sfxKick();
   }
   checkKO(defender);
   if (defender.state === 'ko'){
@@ -769,7 +816,9 @@ function tryMeleeHit(attacker, defender, g){
   const hurt = currentHurtbox(defender);
   if (aabbIntersect(hb, hurt)){
     attacker.hitConsumedThisSwing = true;
-    applyHit(attacker, defender, attacker.state === 'punch' ? PUNCH_TABLE : KICK_TABLE, g);
+    const baseTable = attacker.state === 'punch' ? PUNCH_TABLE : KICK_TABLE;
+    const table = attacker.traits.dmgMult === 1 ? baseTable : { ...baseTable, dmg: baseTable.dmg * attacker.traits.dmgMult };
+    applyHit(attacker, defender, table, g);
   }
 }
 
@@ -820,7 +869,7 @@ function decideAI(f, opp, g){
     const r = Math.random();
     if (r < 0.40) setDir(f, toward);
     else if (r < 0.55){ setDir(f, toward); f.aiPending = 'dash'; }
-    else if (r < 0.70 && f.meter >= SPECIAL_COST) f.aiPending = 'special';
+    else if (r < 0.70 && f.meter >= f.traits.special.cost) f.aiPending = 'special';
     else if (r < 0.85) f.aiMoveDown = true;
     else setDir(f, away);
   } else {
@@ -828,7 +877,7 @@ function decideAI(f, opp, g){
     if (r < 0.35) f.aiPending = 'punch';
     else if (r < 0.60) f.aiPending = 'kick';
     else if (r < 0.80) f.aiMoveDown = true;
-    else if (r < 0.90 && f.meter >= SPECIAL_COST) f.aiPending = 'special';
+    else if (r < 0.90 && f.meter >= f.traits.special.cost) f.aiPending = 'special';
     else setDir(f, away);
   }
 }
@@ -1115,7 +1164,10 @@ function initSelectScreen(){
       const label = document.createElement('div');
       label.className = 'thumb-label';
       label.textContent = skin.name;
-      wrap.appendChild(canvas); wrap.appendChild(label);
+      const archetype = document.createElement('div');
+      archetype.className = 'thumb-archetype';
+      archetype.textContent = skin.traits.archetype;
+      wrap.appendChild(canvas); wrap.appendChild(label); wrap.appendChild(archetype);
       container.appendChild(wrap);
       wrap.addEventListener('click', () => selectSkin(side, skin.key));
       const pctx = canvas.getContext('2d');
