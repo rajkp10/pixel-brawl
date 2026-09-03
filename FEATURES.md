@@ -183,8 +183,10 @@ The projectile spawns at chest height, travels at 500 px/s, and can be blocked, 
 - **Knockback** scaled to the attack's weight.
 - **Hitstun** that locks the defender out of acting.
 - A subtle **screen shake** (150 ms) on heavy hits — kicks and specials only, so it stays meaningful.
+- **Hit-stop**: the instant a hit lands, the entire match freezes for a short beat — 40 ms on a punch, 80 ms on a kick or projectile, 140 ms on a KO — before knockback and hitstun continue. Both fighters freeze equally (it's a shared dramatic pause, not a defender-only lockout), and a button press made during that freeze isn't lost — it's held and registers the instant the freeze ends.
+- **Synthesized sound** for every hit, block, dash, and KO — punches crack, kicks thud, blocks sound muffled, dashes whoosh, and a KO gets its own heavier stinger. All of it is generated at runtime with the Web Audio API (oscillators and filtered noise bursts) — there are no sound files and no asset weight. Audio unlocks on the player's first keypress or click, per browser autoplay rules.
 
-Blocked hits get a smaller 4-particle burst and no shake, giving blocks a distinctly softer feel.
+Blocked hits get a smaller 4-particle burst, no shake, and a shorter hit-stop, giving blocks a distinctly softer feel.
 
 ---
 
@@ -194,10 +196,12 @@ Blocked hits get a smaller 4-particle burst and no shake, giving blocks a distin
 
 Each round runs through a small internal cycle:
 
-1. **Round intro** — a "ROUND N" banner for 1.5 s while the fighters stand ready.
+1. **Round intro** — a "ROUND N" banner for 1.5 s while the fighters stand ready, with its own two-note "ready" stinger.
 2. **Fighting** — a 60-second timer counts down.
-3. **Round end** — a 2 s banner naming the round winner.
-4. Either the next round begins, or the match ends and the post-match screen appears.
+3. **Round end** — a 2 s banner naming the round winner, with a resolving chime.
+4. Either the next round begins (another "ready" stinger), or the match ends, the post-match screen appears, and a longer three-note fanfare plays.
+
+All three stingers are synthesized the same way as the combat hit sounds (Web Audio oscillators, no files) — see §8's Hit Feedback for the technique.
 
 **A round is won by:**
 
@@ -265,7 +269,7 @@ The select screen shows a **live-animating idle-pose preview** of all four chara
 
 **Fixed-timestep simulation.** The game logic advances in fixed 60 Hz steps via an accumulator, while rendering happens once per animation frame. This means combat timings — startup frames, hitstun, dash duration — are **identical on a 60 Hz monitor and a 144 Hz monitor**, which is essential for a fighting game to feel consistent. Frame delta is clamped to 50 ms so returning from a background tab can never fast-forward the match.
 
-**Update order each step:** gather input → run each fighter's state machine and physics → resolve combat (hitboxes, projectiles, body separation) → update round and match bookkeeping → advance animation cursors → age particles and timers → sync the DOM HUD.
+**Update order each step:** check hit-stop (if the match is frozen on a fresh hit, the step ends here — nothing else advances) → gather input → run each fighter's state machine and physics → resolve combat (hitboxes, projectiles, body separation) → update round and match bookkeeping → advance animation cursors → age particles and timers → sync the DOM HUD.
 
 **Data-driven content.** Characters and arenas are plain arrays of descriptor objects. Adding a fourth arena or a fifth skin means appending one entry — the select screen builds its thumbnails by iterating those arrays, so the UI updates itself with no additional wiring.
 

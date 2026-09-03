@@ -235,15 +235,17 @@ const ROUND_INTRO_MS = 1500, ROUND_END_MS = 2000, KO_HOLD_MS = 1200, WIN_POSE_MS
 
 const HIT_FLASH_MS = 120, SHAKE_MS = 150, PARTICLE_COUNT = 8, PARTICLE_LIFE_MS = 300;
 
+const HITSTOP_LIGHT = 40, HITSTOP_HEAVY = 80, HITSTOP_BLOCK_MULT = 0.5, HITSTOP_KO = 140;
+
 const AI_DECISION_INTERVAL = [200, 350], AI_FAR_RANGE = 220, AI_CLOSE_RANGE = 90;
 const AI_REACT_RANGE = 100, AI_DUCK_RANGE = 150, AI_BLOCK_REACTION_CHANCE = 0.5;
 
 const KEYMAP_P1 = { left:'a', right:'d', up:'w', down:'s', dash:'shift', punch:'j', kick:'k', special:'l' };
 const KEYMAP_P2 = { left:'arrowleft', right:'arrowright', up:'arrowup', down:'arrowdown', dash:'/', punch:'1', kick:'2', special:'3' };
 
-const PUNCH_TABLE = { dmg:PUNCH_DMG, kb:PUNCH_KNOCKBACK, stun:PUNCH_HITSTUN, meterHit:PUNCH_METER_HIT, meterBlock:PUNCH_METER_BLOCK, meterDef:PUNCH_METER_DEFENDER, big:false };
-const KICK_TABLE  = { dmg:KICK_DMG,  kb:KICK_KNOCKBACK,  stun:KICK_HITSTUN,  meterHit:KICK_METER_HIT,  meterBlock:KICK_METER_BLOCK,  meterDef:KICK_METER_DEFENDER,  big:true  };
-const PROJECTILE_TABLE = { dmg:PROJECTILE_DMG, kb:200, stun:320, meterHit:PROJECTILE_METER_HIT, meterBlock:4, meterDef:6, big:true };
+const PUNCH_TABLE = { dmg:PUNCH_DMG, kb:PUNCH_KNOCKBACK, stun:PUNCH_HITSTUN, meterHit:PUNCH_METER_HIT, meterBlock:PUNCH_METER_BLOCK, meterDef:PUNCH_METER_DEFENDER, big:false, hitstop:HITSTOP_LIGHT };
+const KICK_TABLE  = { dmg:KICK_DMG,  kb:KICK_KNOCKBACK,  stun:KICK_HITSTUN,  meterHit:KICK_METER_HIT,  meterBlock:KICK_METER_BLOCK,  meterDef:KICK_METER_DEFENDER,  big:true,  hitstop:HITSTOP_HEAVY };
+const PROJECTILE_TABLE = { dmg:PROJECTILE_DMG, kb:200, stun:320, meterHit:PROJECTILE_METER_HIT, meterBlock:4, meterDef:6, big:true, hitstop:HITSTOP_HEAVY };
 
 /* ============================================================
    UTIL
@@ -252,12 +254,104 @@ function clamp(v, min, max){ return Math.max(min, Math.min(max, v)); }
 function aabbIntersect(a, b){ return a.x < b.x+b.w && a.x+a.w > b.x && a.y < b.y+b.h && a.y+a.h > b.y; }
 
 /* ============================================================
+   AUDIO (synthesized SFX via Web Audio — no audio files)
+   ============================================================ */
+let audioCtx = null;
+
+function ensureAudio(){
+  if (!audioCtx){
+    const Ctx = window.AudioContext || window.webkitAudioContext;
+    if (!Ctx) return null;
+    audioCtx = new Ctx();
+  }
+  if (audioCtx.state === 'suspended') audioCtx.resume();
+  return audioCtx;
+}
+
+function noiseBuffer(ctx, duration){
+  const n = Math.max(1, Math.floor(ctx.sampleRate * duration));
+  const buffer = ctx.createBuffer(1, n, ctx.sampleRate);
+  const data = buffer.getChannelData(0);
+  for (let i=0;i<n;i++) data[i] = Math.random()*2 - 1;
+  return buffer;
+}
+
+function playNoiseHit(opts){
+  const ctx = ensureAudio();
+  if (!ctx) return;
+  const { duration=0.08, volume=0.3, filterFreq=1800, filterType='lowpass', decay=duration } = opts;
+  const src = ctx.createBufferSource();
+  src.buffer = noiseBuffer(ctx, duration);
+  const filter = ctx.createBiquadFilter();
+  filter.type = filterType;
+  filter.frequency.value = filterFreq;
+  const gain = ctx.createGain();
+  const now = ctx.currentTime;
+  gain.gain.setValueAtTime(volume, now);
+  gain.gain.exponentialRampToValueAtTime(0.001, now + decay);
+  src.connect(filter); filter.connect(gain); gain.connect(ctx.destination);
+  src.start(now);
+  src.stop(now + decay + 0.02);
+}
+
+function playTone(opts){
+  const ctx = ensureAudio();
+  if (!ctx) return;
+  const { freqStart=440, freqEnd=freqStart, duration=0.1, volume=0.22, type='square' } = opts;
+  const osc = ctx.createOscillator();
+  osc.type = type;
+  const gain = ctx.createGain();
+  const now = ctx.currentTime;
+  osc.frequency.setValueAtTime(freqStart, now);
+  osc.frequency.exponentialRampToValueAtTime(Math.max(1, freqEnd), now + duration);
+  gain.gain.setValueAtTime(volume, now);
+  gain.gain.exponentialRampToValueAtTime(0.001, now + duration);
+  osc.connect(gain); gain.connect(ctx.destination);
+  osc.start(now);
+  osc.stop(now + duration + 0.02);
+}
+
+function sfxPunch(){
+  playNoiseHit({ duration:0.07, volume:0.32, filterFreq:2600, decay:0.08 });
+  playTone({ freqStart:180, freqEnd:90, duration:0.06, volume:0.16, type:'square' });
+}
+function sfxKick(){
+  playNoiseHit({ duration:0.11, volume:0.38, filterFreq:1200, decay:0.14 });
+  playTone({ freqStart:110, freqEnd:55, duration:0.13, volume:0.22, type:'square' });
+}
+function sfxBlock(){
+  playNoiseHit({ duration:0.09, volume:0.2, filterFreq:700, filterType:'bandpass', decay:0.09 });
+  playTone({ freqStart:220, freqEnd:180, duration:0.07, volume:0.1, type:'triangle' });
+}
+function sfxWhoosh(){
+  playNoiseHit({ duration:0.16, volume:0.14, filterFreq:900, filterType:'highpass', decay:0.16 });
+}
+function sfxKO(){
+  playNoiseHit({ duration:0.3, volume:0.4, filterFreq:900, decay:0.35 });
+  playTone({ freqStart:160, freqEnd:40, duration:0.32, volume:0.28, type:'sawtooth' });
+}
+function sfxRoundStart(){
+  playTone({ freqStart:392, duration:0.09, volume:0.2, type:'square' });
+  setTimeout(() => playTone({ freqStart:523, duration:0.14, volume:0.22, type:'square' }), 90);
+}
+function sfxRoundEnd(){
+  playTone({ freqStart:523, duration:0.1, volume:0.2, type:'triangle' });
+  setTimeout(() => playTone({ freqStart:659, duration:0.16, volume:0.22, type:'triangle' }), 100);
+}
+function sfxMatchEnd(){
+  playTone({ freqStart:523, duration:0.12, volume:0.22, type:'square' });
+  setTimeout(() => playTone({ freqStart:659, duration:0.12, volume:0.22, type:'square' }), 110);
+  setTimeout(() => playTone({ freqStart:784, duration:0.3, volume:0.26, type:'square' }), 220);
+}
+
+/* ============================================================
    INPUT
    ============================================================ */
 const heldKeys = new Set();
 const justPressed = new Set();
 
 window.addEventListener('keydown', (e) => {
+  ensureAudio();
   const k = e.key.toLowerCase();
   if (k === 'escape') { goToSelect(); return; }
   if (['arrowup','arrowdown','arrowleft','arrowright'].includes(k)) e.preventDefault();
@@ -438,6 +532,7 @@ function groundedMovement(f, input, opp, g, dt){
     f.vx = dir * DASH_SPEED;
     f.facingLocked = true;
     f.animFrames = ANIM.dash; f.animIndex = 0; f.animFrameTimer = 0;
+    sfxWhoosh();
     return;
   }
   if (tryStartAction(f, input, opp, g)) return;
@@ -641,6 +736,8 @@ function applyHit(attacker, defender, table, g){
     defender.meter = clamp(defender.meter + table.meterDef*0.4, 0, MAX_METER);
     attacker.meter = clamp(attacker.meter + table.meterBlock, 0, MAX_METER);
     spawnParticles(g, defender.x - dir*20, defender.y-110, 4);
+    g.hitStopTimer = Math.max(g.hitStopTimer, Math.round(table.hitstop * HITSTOP_BLOCK_MULT));
+    sfxBlock();
   } else {
     defender.health = Math.max(0, defender.health - table.dmg);
     defender.state = 'hurt';
@@ -654,8 +751,14 @@ function applyHit(attacker, defender, table, g){
     defender.meter = clamp(defender.meter + table.meterDef, 0, MAX_METER);
     spawnParticles(g, defender.x - dir*20, defender.y-120, PARTICLE_COUNT);
     if (table.big) g.shakeTimer = SHAKE_MS;
+    g.hitStopTimer = Math.max(g.hitStopTimer, table.hitstop);
+    if (table === PUNCH_TABLE) sfxPunch(); else sfxKick();
   }
   checkKO(defender);
+  if (defender.state === 'ko'){
+    g.hitStopTimer = Math.max(g.hitStopTimer, HITSTOP_KO);
+    sfxKO();
+  }
 }
 
 function tryMeleeHit(attacker, defender, g){
@@ -763,7 +866,7 @@ const Game = {
   wins: [0,0], round: 1,
   fightPhase: 'roundIntro', phaseTimer: 0,
   roundTime: ROUND_TIME,
-  koHoldTimer: 0, shakeTimer: 0,
+  koHoldTimer: 0, shakeTimer: 0, hitStopTimer: 0,
   roundWinnerSide: null, matchWinnerSide: null,
 };
 
@@ -774,6 +877,7 @@ function resetForNewRound(){
   Game.roundTime = ROUND_TIME;
   Game.koHoldTimer = 0;
   Game.shakeTimer = 0;
+  Game.hitStopTimer = 0;
   Game.roundWinnerSide = null;
 }
 
@@ -801,6 +905,7 @@ function startMatch(){
   resetForNewRound();
   Game.fightPhase = 'roundIntro'; Game.phaseTimer = 0;
   showScreen('fight');
+  sfxRoundStart();
 }
 
 function startRoundEnd(winnerSide){
@@ -812,12 +917,14 @@ function startRoundEnd(winnerSide){
     const winner = winnerSide === 0 ? Game.p1 : Game.p2;
     if (winner.state !== 'ko'){ winner.state = 'win'; winner.animFrames = ANIM.win; winner.animIndex = 0; }
   }
+  sfxRoundEnd();
 }
 
 function showPostmatch(){
   const winnerName = Game.matchWinnerSide === 0 ? Game.p1.name : Game.p2.name;
   document.getElementById('postmatch-title').textContent = winnerName.toUpperCase() + ' WINS!';
   showScreen('postmatch');
+  sfxMatchEnd();
 }
 
 function updateRoundIntro(step){
@@ -830,17 +937,23 @@ function updateRoundEnd(step){
   if (Game.phaseTimer >= ROUND_END_MS){
     if (Game.wins[0] >= ROUNDS_TO_WIN || Game.wins[1] >= ROUNDS_TO_WIN){
       Game.matchWinnerSide = Game.wins[0] > Game.wins[1] ? 0 : 1;
+      Game.fightPhase = 'matchOver';
       showPostmatch();
     } else {
       Game.round++;
       resetForNewRound();
       Game.fightPhase = 'roundIntro'; Game.phaseTimer = 0;
+      sfxRoundStart();
     }
   }
 }
 
 function updateFightingTick(step){
   const g = Game;
+  if (g.hitStopTimer > 0){
+    g.hitStopTimer = Math.max(0, g.hitStopTimer - step);
+    return;
+  }
   if (g.shakeTimer > 0) g.shakeTimer = Math.max(0, g.shakeTimer - step);
 
   g.roundTime -= step/1000;
@@ -875,7 +988,8 @@ function update(step){
     case 'roundEnd': updateRoundEnd(step); break;
   }
   updateHUD();
-  justPressed.clear();
+  // Don't drop a just-pressed edge while frozen in hit-stop — let it survive to the tick that resumes input.
+  if (Game.hitStopTimer <= 0) justPressed.clear();
 }
 
 /* ============================================================
@@ -1065,12 +1179,14 @@ document.querySelectorAll('.mode-btn').forEach(btn => {
     document.getElementById('p2-label').textContent = Game.mode === '1P' ? 'CPU FIGHTER' : 'PLAYER 2';
   });
 });
-document.getElementById('btn-start').addEventListener('click', startMatch);
+document.getElementById('btn-start').addEventListener('click', () => { ensureAudio(); startMatch(); });
 document.getElementById('btn-rematch').addEventListener('click', () => {
+  ensureAudio();
   resetForNewRound();
   Game.wins = [0,0]; Game.round = 1;
   Game.fightPhase = 'roundIntro'; Game.phaseTimer = 0;
   showScreen('fight');
+  sfxRoundStart();
 });
 document.getElementById('btn-change').addEventListener('click', () => showScreen('select'));
 
