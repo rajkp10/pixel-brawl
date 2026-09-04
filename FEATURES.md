@@ -190,6 +190,14 @@ The projectile always spawns at chest height and can be blocked, ducked, or simp
 
 Blocked hits get a smaller 4-particle burst, no shake, and a shorter hit-stop, giving blocks a distinctly softer feel.
 
+### Combos
+
+Landing consecutive hits on an opponent builds a **combo counter**, shown next to that fighter in their own color ("3 HITS", escalating to "N HIT COMBO!" at 5+). It counts up on every landed hit and resets to zero the moment that fighter's attack is **blocked** — or after **1.5 seconds** pass without landing another one, whichever comes first. Getting hit yourself also clears any combo you were building.
+
+**Punch can cancel into kick — but only if the punch actually landed.** During the first 100 ms of a *landed* punch's recovery, pressing kick skips the rest of that recovery and throws a kick immediately, with its startup halved (85 ms instead of 170 ms) since it's finishing a swing already in motion rather than starting cold. A punch that whiffed or got blocked cancels into nothing — the window only opens on a confirmed hit, so it rewards reacting to your own hit landing rather than mashing.
+
+That halved startup is what makes an early cancel a genuine guaranteed combo: thrown within roughly the first 65 ms of the window, the kick's active frames arrive before the punch's own hitstun (220 ms) has worn off, so the opponent has no chance to block or act between the two hits. A later cancel (up to the full 100 ms) still comes out faster than waiting out full recovery, so it's useful pressure even when it isn't a true combo. There's no punch→punch, kick→kick, or kick→punch cancel — this is one deliberately narrow timing tool, not a combo tree.
+
 ---
 
 ## 9. Match Structure

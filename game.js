@@ -269,6 +269,15 @@ const HIT_FLASH_MS = 120, SHAKE_MS = 150, PARTICLE_COUNT = 8, PARTICLE_LIFE_MS =
 
 const HITSTOP_LIGHT = 40, HITSTOP_HEAVY = 80, HITSTOP_BLOCK_MULT = 0.5, HITSTOP_KO = 140;
 
+const COMBO_RESET_MS = 1500;
+// A punch that actually lands can be canceled into a kick during the early part of its
+// recovery — a hit-confirm timing window, not a free string (it does nothing on whiff).
+// The canceled kick's startup is halved (it's finishing a swing already in motion, not
+// starting cold), which is what makes an early, precise cancel a true combo: kick becomes
+// active before PUNCH_HITSTUN (220ms) runs out. A later cancel still comes out faster than
+// waiting out recovery normally, so it's useful pressure even when it isn't a true combo.
+const PUNCH_CANCEL_WINDOW_MS = 100, CANCEL_KICK_STARTUP = 85;
+
 const AI_DECISION_INTERVAL = [200, 350], AI_FAR_RANGE = 220, AI_CLOSE_RANGE = 90;
 const AI_REACT_RANGE = 100, AI_DUCK_RANGE = 150, AI_BLOCK_REACTION_CHANCE = 0.5;
 
@@ -433,6 +442,10 @@ class Fighter {
     this.attackPhase = null;
     this.phaseTimer = 0;
     this.hitConsumedThisSwing = false;
+    this.attackStartupOverride = 0;
+
+    this.comboCount = 0;
+    this.comboTimer = 0;
 
     this.flashTimer = 0;
     this.hitstunRemaining = 0;
@@ -452,7 +465,8 @@ function resetFighterForRound(f, x, facing){
   f.state = 'idle';
   f.animFrames = ANIM.idle; f.animIndex = 0; f.animFrameTimer = 0;
   f.health = MAX_HEALTH; f.meter = 0;
-  f.attackPhase = null; f.phaseTimer = 0; f.hitConsumedThisSwing = false;
+  f.attackPhase = null; f.phaseTimer = 0; f.hitConsumedThisSwing = false; f.attackStartupOverride = 0;
+  f.comboCount = 0; f.comboTimer = 0;
   f.flashTimer = 0; f.hitstunRemaining = 0;
   f.dashCooldownRemaining = 0; f.dashTimer = 0; f.blockTimer = 0;
   f.aiTimer = 0; f.aiMoveLeft = false; f.aiMoveRight = false; f.aiMoveDown = false; f.aiPending = null;
@@ -469,7 +483,7 @@ function advanceAnim(f, frameArr, holdMs, dt, loop){
   }
 }
 
-function startAttack(f, type){
+function startAttack(f, type, startupOverride){
   f.state = type;
   f.attackPhase = 'startup';
   f.phaseTimer = 0;
@@ -478,6 +492,7 @@ function startAttack(f, type){
   if (f.grounded) f.vx = 0; // air attacks keep their jump-arc momentum instead of rooting
   f.animFrames = type === 'punch' ? ANIM.punch : ANIM.kick;
   f.animIndex = 0;
+  f.attackStartupOverride = startupOverride || 0;
 }
 
 function startSpecial(f){
@@ -490,12 +505,22 @@ function startSpecial(f){
   f.animIndex = 0;
 }
 
-function updateAttack(f, dt){
+function updateAttack(f, dt, input){
   f.phaseTimer += dt;
   const isPunch = f.state === 'punch';
+
+  // Punch → kick cancel: only once the punch has actually landed, and only in the
+  // early part of recovery. Whiffed or blocked punches get nothing — this rewards
+  // hit-confirming, not mashing.
+  if (isPunch && f.attackPhase === 'recovery' && f.hitConsumedThisSwing &&
+      f.phaseTimer <= PUNCH_CANCEL_WINDOW_MS && input && input.kickPressed){
+    startAttack(f, 'kick', CANCEL_KICK_STARTUP);
+    return;
+  }
+
   const T = isPunch
     ? { startup:PUNCH_STARTUP, active:PUNCH_ACTIVE, recovery:PUNCH_RECOVERY }
-    : { startup:KICK_STARTUP,  active:KICK_ACTIVE,  recovery:KICK_RECOVERY };
+    : { startup:f.attackStartupOverride || KICK_STARTUP, active:KICK_ACTIVE, recovery:KICK_RECOVERY };
 
   if (f.attackPhase === 'startup' && f.phaseTimer >= T.startup){
     f.attackPhase = 'active'; f.phaseTimer = 0;
@@ -519,7 +544,7 @@ function updateAttack(f, dt){
     else f.animIndex = 3;
   } else {
     f.animFrames = ANIM.kick;
-    if (f.attackPhase === 'startup') f.animIndex = f.phaseTimer < KICK_STARTUP/2 ? 0 : 1;
+    if (f.attackPhase === 'startup') f.animIndex = f.phaseTimer < T.startup/2 ? 0 : 1;
     else if (f.attackPhase === 'active') f.animIndex = 2;
     else f.animIndex = f.phaseTimer < KICK_RECOVERY/2 ? 3 : 4;
   }
@@ -594,6 +619,10 @@ function groundedMovement(f, input, opp, g, dt){
 function updateFighter(f, input, dt, opp, g){
   if (f.flashTimer > 0) f.flashTimer = Math.max(0, f.flashTimer - dt);
   if (f.dashCooldownRemaining > 0) f.dashCooldownRemaining = Math.max(0, f.dashCooldownRemaining - dt);
+  if (f.comboTimer > 0){
+    f.comboTimer -= dt;
+    if (f.comboTimer <= 0){ f.comboTimer = 0; f.comboCount = 0; }
+  }
   if (f.traits.passiveMeterRegen && f.state !== 'ko'){
     f.meter = clamp(f.meter + f.traits.passiveMeterRegen * dt / 1000, 0, MAX_METER);
   }
@@ -672,7 +701,7 @@ function updateFighter(f, input, dt, opp, g){
     }
     case 'punch':
     case 'kick':
-      updateAttack(f, dt);
+      updateAttack(f, dt, input);
       break;
     case 'special':
       updateSpecial(f, dt, g, input);
@@ -785,6 +814,7 @@ function applyHit(attacker, defender, table, g){
     spawnParticles(g, defender.x - dir*20, defender.y-110, 4);
     g.hitStopTimer = Math.max(g.hitStopTimer, Math.round(table.hitstop * HITSTOP_BLOCK_MULT));
     sfxBlock();
+    attacker.comboCount = 0; attacker.comboTimer = 0; // blocked — the combo attempt stops here
   } else {
     defender.health = Math.max(0, defender.health - table.dmg);
     defender.state = 'hurt';
@@ -800,6 +830,8 @@ function applyHit(attacker, defender, table, g){
     if (table.big) g.shakeTimer = SHAKE_MS;
     g.hitStopTimer = Math.max(g.hitStopTimer, table.hitstop);
     if (table.type === 'punch') sfxPunch(); else sfxKick();
+    attacker.comboCount++; attacker.comboTimer = COMBO_RESET_MS;
+    defender.comboCount = 0; defender.comboTimer = 0; // getting hit ends any combo you were building
   }
   checkKO(defender);
   if (defender.state === 'ko'){
@@ -1055,6 +1087,21 @@ function renderPips(el, count){
   }
 }
 
+const lastComboShown = [0, 0];
+function updateComboText(el, fighter, idx){
+  if (fighter.comboCount >= 2){
+    const text = fighter.comboCount >= 5 ? (fighter.comboCount + ' HIT COMBO!') : (fighter.comboCount + ' HITS');
+    if (lastComboShown[idx] !== fighter.comboCount){
+      el.textContent = text;
+      el.classList.remove('pop'); void el.offsetWidth; el.classList.add('pop');
+    }
+    el.classList.add('show');
+  } else {
+    el.classList.remove('show');
+  }
+  lastComboShown[idx] = fighter.comboCount;
+}
+
 function updateHUD(){
   const g = Game;
   setWidth('health-p1', g.p1.health/MAX_HEALTH*100);
@@ -1064,6 +1111,8 @@ function updateHUD(){
   document.getElementById('timer').textContent = Math.max(0, Math.ceil(g.roundTime));
   renderPips(document.getElementById('pips-p1'), g.wins[0]);
   renderPips(document.getElementById('pips-p2'), g.wins[1]);
+  updateComboText(document.getElementById('combo-p1'), g.p1, 0);
+  updateComboText(document.getElementById('combo-p2'), g.p2, 1);
 
   const banner = document.getElementById('banner');
   if (g.fightPhase === 'roundIntro'){
