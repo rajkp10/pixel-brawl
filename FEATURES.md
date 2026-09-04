@@ -6,9 +6,10 @@ A browser-based 2D fighting game built in pure HTML, CSS, and JavaScript. No fra
 
 | File | Role |
 |---|---|
-| `index.html` | Page shell: all CSS, the three screens (select / fight / post-match), the HUD bezel, and the game canvas. |
+| `index.html` | Page shell: all CSS, the three screens (select / fight / post-match), the HUD bezel, the game canvas, and all SEO/social metadata. |
 | `game.js` | The entire engine: frame map, arenas, constants, input, fighter state machine, combat, AI, round flow, rendering. |
-| `assets/*.png` | Four 1152×1024 sprite sheets (recolors of one shared character rig). |
+| `assets/*.png` | Four 1152×1024 sprite sheets (recolors of one shared character rig), plus `favicon.png`, `apple-touch-icon.png`, and `og-image.png` — all three generated from the game's own rendering code, not hand-drawn separately. |
+| `robots.txt` / `sitemap.xml` | Root-level files for search engines — see §1. |
 
 ---
 
@@ -17,6 +18,19 @@ A browser-based 2D fighting game built in pure HTML, CSS, and JavaScript. No fra
 Double-click `index.html`. That's the whole install process.
 
 The game needs no local server because it only loads same-folder images. If you *do* serve it (e.g. `python -m http.server 8934`), it behaves identically.
+
+### SEO & sharing
+
+The page is set up to be found and to look right wherever it's linked:
+
+- **Meta tags**: a real `<title>`, description, canonical link (`https://playpixelbrawl.netlify.app/`), and `theme-color` matching the game's own dark palette.
+- **Open Graph + Twitter Card**: link previews (Discord, Slack, Twitter/X, iMessage, etc.) show a proper title, description, and a 1200×630 preview image.
+- **The preview image, favicon, and apple-touch-icon are all generated with the game's own canvas-drawing code** — the OG image reuses `drawArenaNeon` plus the real character sprites, and the icons are a cropped, upscaled portrait of Blue Ronin's idle sprite — not separately hand-drawn art, and not a generic placeholder.
+- **`robots.txt`** allows all crawlers and points to **`sitemap.xml`**, which lists the single page.
+- **JSON-LD structured data** (`schema.org/VideoGame`) describes the game for rich search results — genre, platform, free-to-play, author.
+- **`<noscript>` fallback**: since the whole game requires JavaScript, a plain-text explanation is shown to anyone (or any crawler) without it, instead of a blank page.
+
+All of the URLs above point at the current Netlify deployment (`playpixelbrawl.netlify.app`). If the site later moves to a custom domain, every one of these — canonical link, Open Graph/Twitter URLs, JSON-LD `url`/`image`, and `sitemap.xml` — needs updating to match; they're not derived from a single config value.
 
 ---
 
