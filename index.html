@@ -285,24 +285,30 @@
 
       /* ---- fight screen ---- */
       #screen-fight {
-        /* Shared width budget for #hud and .canvas-wrap so the whole column
-           (HUD + gap + canvas) fits within the viewport's height on landscape
-           phones. 96px reserves app padding (top+bottom) + the HUD's own
-           height + the gap between HUD and canvas-wrap. Tuned against real
-           device-landscape dimensions (844x390, 915x412, 667x375). */
-        --fit-w: min(960px, calc((100dvh - 96px) * 960 / 540));
+        /* Width budget for .canvas-wrap so it fits within the viewport's
+           height on landscape phones. #hud now overlays the canvas instead
+           of stacking above it, so the only reserve needed is #app's own
+           padding. Tuned against real device-landscape dimensions
+           (844x390, 915x412, 667x375). */
+        --fit-w: min(960px, calc((100dvh - 20px) * 960 / 540));
       }
       #hud {
-        width: 100%;
-        max-width: var(--fit-w);
+        position: absolute;
+        top: 0;
+        left: 0;
+        right: 0;
+        z-index: 5;
         display: flex;
         align-items: flex-start;
         justify-content: space-between;
-        background: var(--panel);
-        border: 2px solid var(--panel-border);
-        border-radius: 6px 6px 0 0;
-        padding: 10px 16px;
+        background: linear-gradient(
+          to bottom,
+          rgba(10, 10, 15, 0.85),
+          rgba(10, 10, 15, 0)
+        );
+        padding: 10px 16px 24px;
         gap: 12px;
+        pointer-events: none;
       }
       .hud-side {
         flex: 1;
@@ -387,7 +393,8 @@
         max-width: var(--fit-w);
         aspect-ratio: 960 / 540;
         border: 2px solid var(--panel-border);
-        border-top: none;
+        border-radius: 6px;
+        overflow: hidden;
       }
       #rotate-gate {
         display: none;
@@ -622,33 +629,33 @@
       </div>
 
       <div id="screen-fight" class="screen">
-        <div id="hud">
-          <div class="hud-side p1" id="hud-p1">
-            <div class="hud-name" id="name-p1">PLAYER 1</div>
-            <div class="bar health">
-              <div class="bar-fill" id="health-p1"></div>
-            </div>
-            <div class="bar meter">
-              <div class="bar-fill" id="meter-p1"></div>
-            </div>
-            <div class="round-pips" id="pips-p1"></div>
-          </div>
-          <div class="hud-center">
-            <div id="timer">60</div>
-          </div>
-          <div class="hud-side p2" id="hud-p2">
-            <div class="hud-name" id="name-p2">PLAYER 2</div>
-            <div class="bar health">
-              <div class="bar-fill" id="health-p2"></div>
-            </div>
-            <div class="bar meter">
-              <div class="bar-fill" id="meter-p2"></div>
-            </div>
-            <div class="round-pips" id="pips-p2"></div>
-          </div>
-        </div>
         <div class="canvas-wrap">
           <canvas id="game-canvas" width="960" height="540"></canvas>
+          <div id="hud">
+            <div class="hud-side p1" id="hud-p1">
+              <div class="hud-name" id="name-p1">PLAYER 1</div>
+              <div class="bar health">
+                <div class="bar-fill" id="health-p1"></div>
+              </div>
+              <div class="bar meter">
+                <div class="bar-fill" id="meter-p1"></div>
+              </div>
+              <div class="round-pips" id="pips-p1"></div>
+            </div>
+            <div class="hud-center">
+              <div id="timer">60</div>
+            </div>
+            <div class="hud-side p2" id="hud-p2">
+              <div class="hud-name" id="name-p2">PLAYER 2</div>
+              <div class="bar health">
+                <div class="bar-fill" id="health-p2"></div>
+              </div>
+              <div class="bar meter">
+                <div class="bar-fill" id="meter-p2"></div>
+              </div>
+              <div class="round-pips" id="pips-p2"></div>
+            </div>
+          </div>
           <div id="banner"></div>
           <div class="combo-text p1" id="combo-p1"></div>
           <div class="combo-text p2" id="combo-p2"></div>
