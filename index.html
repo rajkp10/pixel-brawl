@@ -109,7 +109,9 @@
       #app {
         width: 100%;
         max-width: 1000px;
-        padding: 16px;
+        max-height: 100dvh;
+        padding: 8px;
+        overflow-y: auto;
       }
       .screen {
         display: none;
@@ -282,8 +284,17 @@
       }
 
       /* ---- fight screen ---- */
+      #screen-fight {
+        /* Shared width budget for #hud and .canvas-wrap so the whole column
+           (HUD + gap + canvas) fits within the viewport's height on landscape
+           phones. 96px reserves app padding (top+bottom) + the HUD's own
+           height + the gap between HUD and canvas-wrap. Tuned against real
+           device-landscape dimensions (844x390, 915x412, 667x375). */
+        --fit-w: min(960px, calc((100dvh - 96px) * 960 / 540));
+      }
       #hud {
-        width: 960px;
+        width: 100%;
+        max-width: var(--fit-w);
         display: flex;
         align-items: flex-start;
         justify-content: space-between;
@@ -372,16 +383,35 @@
 
       .canvas-wrap {
         position: relative;
-        width: 960px;
-        height: 540px;
+        width: 100%;
+        max-width: var(--fit-w);
+        aspect-ratio: 960 / 540;
         border: 2px solid var(--panel-border);
         border-top: none;
+      }
+      #rotate-gate {
+        display: none;
+        position: fixed;
+        inset: 0;
+        z-index: 1000;
+        background: var(--bg);
+        color: var(--text);
+        align-items: center;
+        justify-content: center;
+        text-align: center;
+        font-family: "Consolas", "Courier New", monospace;
+        font-size: 1.2em;
+        letter-spacing: 2px;
+        padding: 24px;
+      }
+      #rotate-gate.show {
+        display: flex;
       }
       #game-canvas {
         display: block;
         image-rendering: pixelated;
-        width: 960px;
-        height: 540px;
+        width: 100%;
+        height: 100%;
         background: #000;
       }
       #banner {
@@ -461,6 +491,69 @@
         display: flex;
         gap: 16px;
       }
+
+      /* ---- touch controls ---- */
+      .touch-controls {
+        display: none;
+        position: absolute;
+        inset: 0;
+        z-index: 10;
+      }
+      body.touch-active .touch-controls {
+        display: block;
+      }
+      .touch-btn {
+        position: absolute;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        background: rgba(255, 210, 63, 0.14);
+        border: 2px solid rgba(255, 210, 63, 0.55);
+        border-radius: 6px;
+        color: var(--accent);
+        font-size: 0.65em;
+        letter-spacing: 0.5px;
+        font-family: "Consolas", "Courier New", monospace;
+        user-select: none;
+        touch-action: none;
+      }
+      .dpad-btn {
+        background: rgba(232, 232, 240, 0.12);
+        border-color: rgba(232, 232, 240, 0.5);
+        color: var(--text);
+      }
+      .touch-btn.pressed {
+        background: rgba(255, 210, 63, 0.35);
+      }
+      .dpad-btn.pressed {
+        background: rgba(232, 232, 240, 0.3);
+      }
+      .special-btn {
+        border-radius: 50%;
+        aspect-ratio: 1 / 1;
+        height: auto;
+        overflow: hidden;
+        flex-direction: column;
+      }
+      .special-btn.disabled {
+        background: rgba(120, 120, 140, 0.08);
+        border-color: rgba(120, 120, 140, 0.35);
+        color: #6a6a80;
+      }
+      .special-btn.ready {
+        background: rgba(255, 210, 63, 0.28);
+        border-color: var(--accent);
+        color: var(--accent);
+        box-shadow: 0 0 10px rgba(255, 210, 63, 0.7);
+      }
+      .special-fill {
+        position: absolute;
+        left: 0;
+        bottom: 0;
+        right: 0;
+        background: rgba(255, 210, 63, 0.35);
+        pointer-events: none;
+      }
     </style>
   </head>
   <body>
@@ -485,6 +578,9 @@
         </p>
       </div>
     </noscript>
+    <div id="rotate-gate">
+      <p>Rotate your device to play</p>
+    </div>
     <div id="app">
       <div id="screen-select" class="screen active">
         <h1>PIXEL BRAWL</h1>
@@ -556,6 +652,18 @@
           <div id="banner"></div>
           <div class="combo-text p1" id="combo-p1"></div>
           <div class="combo-text p2" id="combo-p2"></div>
+          <div id="touch-controls" class="touch-controls">
+            <div class="touch-btn dpad-btn" id="tc-left"  style="left:8%;    bottom:20%;   width:8%; height:12%;">◀</div>
+            <div class="touch-btn dpad-btn" id="tc-right" style="left:17.5%; bottom:20%;   width:8%; height:12%;">▶</div>
+            <div class="touch-btn dpad-btn" id="tc-up"    style="left:12.75%; bottom:33.5%; width:8%; height:12%;">▲</div>
+            <div class="touch-btn dpad-btn" id="tc-down"  style="left:12.75%; bottom:6.5%;  width:8%; height:12%;">▼</div>
+            <div class="touch-btn action-btn" id="tc-kick"  style="right:4%;  bottom:5%;  width:11%; height:17%;">KICK</div>
+            <div class="touch-btn action-btn" id="tc-punch" style="right:17%; bottom:5%;  width:11%; height:17%;">PUNCH</div>
+            <div class="touch-btn action-btn special-btn disabled" id="tc-special" style="right:4%; bottom:24%; width:9%;">
+              <span>SPCL</span>
+              <div class="special-fill" id="tc-special-fill" style="height:0%"></div>
+            </div>
+          </div>
         </div>
       </div>
 

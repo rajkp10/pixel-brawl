@@ -387,19 +387,121 @@ function sfxMatchEnd(){
 /* ============================================================
    INPUT
    ============================================================ */
+const isMobileUA = /Android|iPhone|iPad|iPod|Mobile/i.test(navigator.userAgent);
+const isTouchDevice = window.matchMedia('(pointer: coarse)').matches && isMobileUA;
+if (isTouchDevice) document.body.classList.add('touch-active');
+
+let rotateGateShowing = false;
+function updateRotateGate(){
+  const isPortrait = window.matchMedia('(orientation: portrait)').matches;
+  rotateGateShowing = isTouchDevice && isPortrait;
+  document.getElementById('rotate-gate').classList.toggle('show', rotateGateShowing);
+}
+window.addEventListener('resize', updateRotateGate);
+window.addEventListener('orientationchange', updateRotateGate);
+updateRotateGate();
+
 const heldKeys = new Set();
 const justPressed = new Set();
+
+function pressKey(k){
+  if (!heldKeys.has(k)) justPressed.add(k);
+  heldKeys.add(k);
+}
+function releaseKey(k){ heldKeys.delete(k); }
+
+// Registry of touch buttons -> the key they drive, plus which pointerId (if
+// any) is currently pressing each one. Used by bindTouchButton/bindDashButton
+// and by the window-level pointerup/pointercancel safety net below, which
+// releases a button by pointerId even if the up/cancel event's target ends up
+// being something other than the button itself.
+const touchKeyMap = new Map(); // el -> key
+const touchPointers = new Map(); // el -> pointerId currently pressing it
+
+function bindTouchButton(el, key){
+  touchKeyMap.set(el, key);
+  el.addEventListener('pointerdown', (e) => {
+    e.preventDefault();
+    // The special button gets a `disabled` class (styling only, no
+    // pointer-events:none) while its meter is below cost — guard the action
+    // here instead so a lost pointerup during the ~16ms the meter takes to
+    // toggle the class can't leave the button (and its key) stuck.
+    if (el.classList.contains('disabled')) return;
+    ensureAudio();
+    el.classList.add('pressed');
+    touchPointers.set(el, e.pointerId);
+    pressKey(key);
+  });
+  const release = () => { el.classList.remove('pressed'); touchPointers.delete(el); releaseKey(key); };
+  el.addEventListener('pointerup', release);
+  el.addEventListener('pointercancel', release);
+  el.addEventListener('pointerleave', release);
+}
+
+const DASH_DOUBLE_TAP_MS = 300;
+
+function bindDashButton(el, key, dashKey){
+  bindTouchButton(el, key);
+  let lastTap = 0;
+  el.addEventListener('pointerdown', () => {
+    if (el.classList.contains('disabled')) return;
+    const now = performance.now();
+    if (now - lastTap <= DASH_DOUBLE_TAP_MS) justPressed.add(dashKey);
+    lastTap = now;
+  });
+}
+
+function updateTouchSpecialButton(){
+  if (!isTouchDevice) return;
+  const f = Game.p1;
+  const ratio = clamp(f.meter / f.traits.special.cost, 0, 1);
+  document.getElementById('tc-special-fill').style.height = (ratio * 100) + '%';
+  const ready = ratio >= 1;
+  const btn = document.getElementById('tc-special');
+  btn.classList.toggle('ready', ready);
+  btn.classList.toggle('disabled', !ready);
+}
+
+if (isTouchDevice){
+  bindTouchButton(document.getElementById('tc-up'), KEYMAP_P1.up);
+  bindTouchButton(document.getElementById('tc-down'), KEYMAP_P1.down);
+  bindTouchButton(document.getElementById('tc-kick'), KEYMAP_P1.kick);
+  bindTouchButton(document.getElementById('tc-punch'), KEYMAP_P1.punch);
+  bindTouchButton(document.getElementById('tc-special'), KEYMAP_P1.special);
+  bindDashButton(document.getElementById('tc-left'), KEYMAP_P1.left, KEYMAP_P1.dash);
+  bindDashButton(document.getElementById('tc-right'), KEYMAP_P1.right, KEYMAP_P1.dash);
+}
+
+// Safety net: if a pointerup/pointercancel doesn't fire on the button itself
+// (implicit pointer capture should prevent this, but this is cheap insurance),
+// release the specific button that pointerId was pressing by matching IDs —
+// never all pressed buttons, so holding one button while tapping another
+// (e.g. move + punch) isn't affected.
+function releaseStrayTouchPointer(e){
+  for (const [el, key] of touchKeyMap){
+    if (touchPointers.get(el) === e.pointerId && el.classList.contains('pressed')){
+      el.classList.remove('pressed');
+      touchPointers.delete(el);
+      releaseKey(key);
+    }
+  }
+}
+window.addEventListener('pointerup', releaseStrayTouchPointer);
+window.addEventListener('pointercancel', releaseStrayTouchPointer);
 
 window.addEventListener('keydown', (e) => {
   ensureAudio();
   const k = e.key.toLowerCase();
   if (k === 'escape') { goToSelect(); return; }
   if (['arrowup','arrowdown','arrowleft','arrowright'].includes(k)) e.preventDefault();
-  if (!heldKeys.has(k)) justPressed.add(k);
-  heldKeys.add(k);
+  pressKey(k);
 });
-window.addEventListener('keyup', (e) => { heldKeys.delete(e.key.toLowerCase()); });
-window.addEventListener('blur', () => { heldKeys.clear(); justPressed.clear(); });
+window.addEventListener('keyup', (e) => { releaseKey(e.key.toLowerCase()); });
+window.addEventListener('blur', () => {
+  heldKeys.clear(); justPressed.clear();
+  document.querySelectorAll('.touch-btn.pressed').forEach(el => el.classList.remove('pressed'));
+  touchPointers.clear();
+});
 
 function buildInput(map){
   return {
@@ -1108,6 +1210,7 @@ function updateHUD(){
   setWidth('health-p2', g.p2.health/MAX_HEALTH*100);
   setWidth('meter-p1', g.p1.meter/MAX_METER*100);
   setWidth('meter-p2', g.p2.meter/MAX_METER*100);
+  updateTouchSpecialButton();
   document.getElementById('timer').textContent = Math.max(0, Math.ceil(g.roundTime));
   renderPips(document.getElementById('pips-p1'), g.wins[0]);
   renderPips(document.getElementById('pips-p2'), g.wins[1]);
@@ -1298,7 +1401,13 @@ function loop(now){
   const dt = Math.min(now-last, 50);
   last = now;
   updatePreviews(dt);
-  if (Game.screen === 'fight'){
+  // Pause combat behind the rotate-gate overlay (touch device rotated to
+  // portrait mid-match) — otherwise the round timer and CPU keep running
+  // while the player can't see or input anything. dt is already clamped
+  // above to at most 50ms, so no matter how long the gate was showing, the
+  // first frame after it closes still only advances by one normal tick —
+  // no separate reset of `last`/`acc` is needed to avoid a time-skip.
+  if (Game.screen === 'fight' && !rotateGateShowing){
     acc += dt;
     while (acc >= STEP){ update(STEP); acc -= STEP; }
     render();
