@@ -139,7 +139,8 @@
       .mode-btn,
       #btn-start,
       #btn-rematch,
-      #btn-change {
+      #btn-change,
+      #btn-fullscreen {
         background: var(--panel);
         border: 2px solid var(--panel-border);
         color: var(--text);
@@ -154,7 +155,8 @@
       .mode-btn:hover,
       #btn-start:hover,
       #btn-rematch:hover,
-      #btn-change:hover {
+      #btn-change:hover,
+      #btn-fullscreen:hover {
         border-color: var(--accent);
         color: var(--accent);
       }
@@ -509,6 +511,15 @@
       body.touch-active .touch-controls {
         display: block;
       }
+      #btn-fullscreen {
+        display: none;
+      }
+      body.touch-active #btn-fullscreen {
+        display: inline-block;
+      }
+      body.touch-active .mode-toggle {
+        display: none;
+      }
       .touch-btn {
         position: absolute;
         display: flex;
@@ -613,6 +624,7 @@
           <div class="arena-thumbs" id="arena-thumbs"></div>
         </div>
         <button id="btn-start">START FIGHT</button>
+        <button id="btn-fullscreen">⛶ FULLSCREEN</button>
         <div class="controls-hint">
           <div>
             <b>P1</b> — WASD move/jump/crouch, Shift dash, J punch, K kick, L

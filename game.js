@@ -1393,6 +1393,17 @@ document.getElementById('btn-rematch').addEventListener('click', () => {
   sfxRoundStart();
 });
 document.getElementById('btn-change').addEventListener('click', () => showScreen('select'));
+document.getElementById('btn-fullscreen').addEventListener('click', () => {
+  if (document.fullscreenElement) {
+    document.exitFullscreen();
+  } else {
+    document.documentElement.requestFullscreen().catch(() => {});
+  }
+});
+document.addEventListener('fullscreenchange', () => {
+  document.getElementById('btn-fullscreen').textContent =
+    document.fullscreenElement ? '⛶ EXIT FULLSCREEN' : '⛶ FULLSCREEN';
+});
 
 const STEP = 1000/60;
 let last = performance.now(), acc = 0;
