@@ -516,6 +516,28 @@
       }
       body.touch-active #btn-fullscreen {
         display: inline-block;
+        animation: fullscreenPulse 2s ease-in-out infinite;
+      }
+      @keyframes fullscreenPulse {
+        0%,
+        100% {
+          box-shadow: 0 0 6px rgba(255, 210, 63, 0.35);
+          border-color: var(--panel-border);
+        }
+        50% {
+          box-shadow: 0 0 14px rgba(255, 210, 63, 0.85);
+          border-color: var(--accent);
+        }
+      }
+      #fullscreen-hint {
+        display: none;
+      }
+      body.touch-active #fullscreen-hint {
+        display: block;
+        font-size: 0.7em;
+        color: var(--dim);
+        letter-spacing: 0.5px;
+        margin-top: -8px;
       }
       body.touch-active .mode-toggle {
         display: none;
@@ -625,6 +647,7 @@
         </div>
         <button id="btn-start">START FIGHT</button>
         <button id="btn-fullscreen">⛶ FULLSCREEN</button>
+        <div id="fullscreen-hint">Recommended for the best view</div>
         <div class="controls-hint">
           <div>
             <b>P1</b> — WASD move/jump/crouch, Shift dash, J punch, K kick, L
