@@ -136,8 +136,16 @@
         display: flex;
         gap: 10px;
       }
+      .primary-actions {
+        display: flex;
+        gap: 14px;
+        flex-wrap: wrap;
+        justify-content: center;
+      }
       .mode-btn,
       #btn-start,
+      #btn-story,
+      #btn-story-retry,
       #btn-rematch,
       #btn-change,
       #btn-fullscreen {
@@ -154,6 +162,8 @@
       }
       .mode-btn:hover,
       #btn-start:hover,
+      #btn-story:hover,
+      #btn-story-retry:hover,
       #btn-rematch:hover,
       #btn-change:hover,
       #btn-fullscreen:hover {
@@ -501,6 +511,71 @@
         gap: 16px;
       }
 
+      /* ---- story mode ---- */
+      .story-portraits {
+        display: flex;
+        gap: 40px;
+      }
+      .story-portraits canvas {
+        image-rendering: pixelated;
+        width: 96px;
+        height: 112px;
+        background: #1a1a24;
+        border: 2px solid var(--panel-border);
+        border-radius: 6px;
+      }
+      @keyframes storySlideInLeft {
+        from {
+          transform: translateX(-60px);
+          opacity: 0;
+        }
+        to {
+          transform: translateX(0);
+          opacity: 1;
+        }
+      }
+      @keyframes storySlideInRight {
+        from {
+          transform: translateX(60px);
+          opacity: 0;
+        }
+        to {
+          transform: translateX(0);
+          opacity: 1;
+        }
+      }
+      .story-portraits canvas.slide-in-left {
+        animation: storySlideInLeft 0.4s ease-out;
+      }
+      .story-portraits canvas.slide-in-right {
+        animation: storySlideInRight 0.4s ease-out;
+      }
+      #story-dialogue-box {
+        background: var(--panel);
+        border: 2px solid var(--panel-border);
+        border-radius: 6px;
+        padding: 16px 24px;
+        max-width: 600px;
+        text-align: center;
+        cursor: pointer;
+      }
+      #story-speaker {
+        color: var(--accent);
+        letter-spacing: 2px;
+        font-size: 0.85em;
+        margin-bottom: 8px;
+      }
+      #story-text {
+        font-size: 1em;
+        line-height: 1.5;
+      }
+      .story-continue-hint {
+        margin-top: 12px;
+        font-size: 0.7em;
+        color: var(--dim);
+        letter-spacing: 1px;
+      }
+
       /* ---- touch controls ---- */
       .touch-controls {
         display: none;
@@ -645,7 +720,10 @@
           <div class="arena-label">ARENA</div>
           <div class="arena-thumbs" id="arena-thumbs"></div>
         </div>
-        <button id="btn-start">START FIGHT</button>
+        <div class="primary-actions">
+          <button id="btn-start">START FIGHT</button>
+          <button id="btn-story">STORY MODE</button>
+        </div>
         <button id="btn-fullscreen">⛶ FULLSCREEN</button>
         <div id="fullscreen-hint">Recommended for the best view</div>
         <div class="controls-hint">
@@ -715,6 +793,23 @@
           <button id="btn-rematch">REMATCH</button>
           <button id="btn-change">CHANGE CHARACTERS</button>
         </div>
+      </div>
+
+      <div id="screen-story-dialogue" class="screen">
+        <div class="story-portraits">
+          <canvas id="story-portrait-left" width="96" height="112"></canvas>
+          <canvas id="story-portrait-right" width="96" height="112"></canvas>
+        </div>
+        <div id="story-dialogue-box">
+          <div id="story-speaker"></div>
+          <div id="story-text"></div>
+          <div class="story-continue-hint">▶ TAP TO CONTINUE</div>
+        </div>
+      </div>
+
+      <div id="screen-story-defeat" class="screen">
+        <h1>DEFEATED</h1>
+        <button id="btn-story-retry">RETRY</button>
       </div>
     </div>
     <script src="game.js"></script>

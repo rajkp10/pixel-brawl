@@ -239,6 +239,46 @@ const ARENAS = [
 ];
 const ARENA_MAP = Object.fromEntries(ARENAS.map(a => [a.key, a]));
 
+const STORY_INTRO = [
+  { speaker: 'Blue Ronin', pose: 'idle', text: "Three nights ago, my dojo was attacked. Our founding scroll — stolen." },
+  { speaker: 'Blue Ronin', pose: 'deepStagger', text: "Without it, everything my master built could be lost forever." },
+  { speaker: 'Blue Ronin', pose: 'palmThrowReady', text: "The trail leads to the docks. Whoever took it will answer for this." },
+];
+const STORY = [
+  {
+    villainSkin: 'street_fist', arena: 'docks',
+    lines: [
+      { speaker: 'Blue Ronin', pose: 'palmExtended', text: "You reek of dock oil and stolen goods. Where is my dojo's scroll?" },
+      { speaker: 'Street Fist', pose: 'stanceShift', text: "Ha! Some old paper? I just move what I'm paid to move. Beat it out of me!" },
+    ],
+    postFightLines: [
+      { speaker: 'Blue Ronin', pose: 'idle', text: "Beaten, he finally talks — the scroll was passed to someone far more dangerous." },
+      { speaker: 'Blue Ronin', pose: 'idle', text: "A shadow who broke into my dojo that night. I know exactly where to find them." },
+    ],
+  },
+  {
+    villainSkin: 'night_ninja', arena: 'dojo',
+    lines: [
+      { speaker: 'Blue Ronin', pose: 'wideLowStance', text: "You dare return to the dojo you defiled?" },
+      { speaker: 'Night Ninja', pose: 'palmExtended', text: "I came to see if you're even worth the trouble... Ronin." },
+    ],
+    postFightLines: [
+      { speaker: 'Blue Ronin', pose: 'idle', text: "Even in defeat, the ninja smirks: \"The scroll's already changed hands again.\"" },
+      { speaker: 'Blue Ronin', pose: 'win', text: "Neon City. That's where this ends — one way or another." },
+    ],
+  },
+  {
+    villainSkin: 'voltage', arena: 'neon',
+    lines: [
+      { speaker: 'Blue Ronin', pose: 'wideLowStance', text: "It ends here. Return what you stole." },
+      { speaker: 'Voltage', pose: 'specialCharge', text: "This scroll is worth more than your precious legacy. Come and take it back." },
+    ],
+  },
+];
+const STORY_ENDING = [
+  { speaker: 'Blue Ronin', pose: 'frontFacingIdle', text: "The scroll returns home. My master's legacy is safe... for now." },
+];
+
 /* ============================================================
    CONSTANTS
    ============================================================ */
@@ -1051,6 +1091,7 @@ const Game = {
   roundTime: ROUND_TIME,
   koHoldTimer: 0, shakeTimer: 0, hitStopTimer: 0,
   roundWinnerSide: null, matchWinnerSide: null,
+  story: { active: false, stageIndex: 0 },
 };
 
 function resetForNewRound(){
@@ -1121,7 +1162,11 @@ function updateRoundEnd(step){
     if (Game.wins[0] >= ROUNDS_TO_WIN || Game.wins[1] >= ROUNDS_TO_WIN){
       Game.matchWinnerSide = Game.wins[0] > Game.wins[1] ? 0 : 1;
       Game.fightPhase = 'matchOver';
-      showPostmatch();
+      if (Game.story.active){
+        handleStoryMatchEnd();
+      } else {
+        showPostmatch();
+      }
     } else {
       Game.round++;
       resetForNewRound();
@@ -1364,6 +1409,180 @@ function updatePreviews(dt){
 }
 
 /* ============================================================
+   STORY MODE
+   ============================================================ */
+let storyDialogueLines = [];
+let storyDialogueIndex = 0;
+let storyDialogueOnComplete = null;
+let storyTypewriterTimer = null;
+let storyPortraitSkins = [];
+
+const STORY_TYPEWRITER_MS = 25;
+
+// Most poses read clearest on their final (most extended) frame — chosen by
+// inspecting every frame of each animation, not just assumed from the name.
+// `hurt` is the exception: its final frame is a deep, half-cropped recoil,
+// and its first frame is a mild guard-up flinch. Frame 1 (head thrown back,
+// visibly pained) reads as genuine anguish, the best match for a grief line.
+// `specialCharge` also needs an override for the Stage 3 line, which uses the
+// first (lowest-power) frame rather than the fully-charged final one.
+const STORY_POSE_FRAME_INDEX = { hurt: 1, specialCharge: 0 };
+
+// Frames that exist in the sprite sheet but aren't wired into any ANIM
+// animation — found by scanning the sheet directly. Rects are shared across
+// skins since every fighter uses the same rig.
+const STORY_EXTRA_FRAMES = {
+  stanceShift:     [593,8,621,53],
+  wideLowStance:   [720,12,751,55],
+  deepStagger:     [656,210,687,246],
+  palmThrowReady:  [593,264,617,310],
+  palmExtended:    [721,264,755,310],
+  frontFacingIdle: [1106,16,1134,54],
+};
+
+function drawStoryPortrait(canvasId, skinKey, flip, pose){
+  const canvas = document.getElementById(canvasId);
+  const ctx = canvas.getContext('2d');
+  ctx.imageSmoothingEnabled = false;
+  let frame;
+  if (pose in STORY_EXTRA_FRAMES){
+    const [x1, y1, x2, y2] = STORY_EXTRA_FRAMES[pose];
+    frame = { x: x1, y: y1, w: x2 - x1, h: y2 - y1 };
+  } else {
+    const frameSet = ANIM[pose] || ANIM.idle;
+    const frameIndex = pose in STORY_POSE_FRAME_INDEX ? STORY_POSE_FRAME_INDEX[pose] : frameSet.length - 1;
+    frame = frameSet[frameIndex];
+  }
+  const w = frame.w * PREVIEW_SCALE, h = frame.h * PREVIEW_SCALE;
+  const x = (canvas.width - w) / 2, y = canvas.height - h - 4;
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
+  ctx.save();
+  if (flip){
+    ctx.translate(x + w, y);
+    ctx.scale(-1, 1);
+    ctx.drawImage(IMAGES[skinKey], frame.x, frame.y, frame.w, frame.h, 0, 0, w, h);
+  } else {
+    ctx.drawImage(IMAGES[skinKey], frame.x, frame.y, frame.w, frame.h, x, y, w, h);
+  }
+  ctx.restore();
+}
+
+function restartStoryAnim(el, className){
+  el.classList.remove(className);
+  void el.offsetWidth; // force reflow so re-adding the class restarts the animation
+  el.classList.add(className);
+}
+
+function typeStoryLine(text){
+  clearInterval(storyTypewriterTimer);
+  const el = document.getElementById('story-text');
+  el.textContent = '';
+  let i = 0;
+  storyTypewriterTimer = setInterval(() => {
+    i++;
+    el.textContent = text.slice(0, i);
+    if (i >= text.length){
+      clearInterval(storyTypewriterTimer);
+      storyTypewriterTimer = null;
+    }
+  }, STORY_TYPEWRITER_MS);
+}
+
+function renderStoryDialogueLine(){
+  const line = storyDialogueLines[storyDialogueIndex];
+  document.getElementById('story-speaker').textContent = line.speaker.toUpperCase();
+  typeStoryLine(line.text);
+  const pose = line.pose || 'idle';
+  const speakerIsHero = line.speaker === 'Blue Ronin';
+  drawStoryPortrait('story-portrait-left', storyPortraitSkins[0], false, speakerIsHero ? pose : 'idle');
+  if (storyPortraitSkins.length === 2){
+    drawStoryPortrait('story-portrait-right', storyPortraitSkins[1], true, speakerIsHero ? 'idle' : pose);
+  }
+}
+
+function showStoryDialogue(lines, portraitSkins, onComplete){
+  storyDialogueLines = lines;
+  storyDialogueIndex = 0;
+  storyDialogueOnComplete = onComplete;
+  storyPortraitSkins = portraitSkins;
+  const leftCanvas = document.getElementById('story-portrait-left');
+  const rightCanvas = document.getElementById('story-portrait-right');
+  leftCanvas.style.display = 'block';
+  restartStoryAnim(leftCanvas, 'slide-in-left');
+  if (portraitSkins.length === 2){
+    rightCanvas.style.display = 'block';
+    restartStoryAnim(rightCanvas, 'slide-in-right');
+  } else {
+    rightCanvas.style.display = 'none';
+  }
+  renderStoryDialogueLine();
+  showScreen('story-dialogue');
+}
+
+function advanceStoryDialogue(){
+  storyDialogueIndex++;
+  if (storyDialogueIndex >= storyDialogueLines.length){
+    const cb = storyDialogueOnComplete;
+    storyDialogueOnComplete = null;
+    if (cb) cb();
+  } else {
+    renderStoryDialogueLine();
+  }
+}
+
+document.getElementById('story-dialogue-box').addEventListener('click', () => {
+  ensureAudio();
+  if (storyTypewriterTimer){
+    clearInterval(storyTypewriterTimer);
+    storyTypewriterTimer = null;
+    document.getElementById('story-text').textContent = storyDialogueLines[storyDialogueIndex].text;
+  } else {
+    advanceStoryDialogue();
+  }
+});
+
+function startStoryFight(stageIndex){
+  const stage = STORY[stageIndex];
+  Game.p1 = new Fighter('blue_ronin', 250, 'p1', SKIN_MAP['blue_ronin'].name);
+  Game.p2 = new Fighter(stage.villainSkin, 710, 'ai', SKIN_MAP[stage.villainSkin].name);
+  Game.wins = [0, 0];
+  Game.round = 1;
+  Game.arena = stage.arena;
+  document.getElementById('name-p1').textContent = Game.p1.name.toUpperCase();
+  document.getElementById('name-p2').textContent = Game.p2.name.toUpperCase();
+  resetForNewRound();
+  Game.fightPhase = 'roundIntro';
+  Game.phaseTimer = 0;
+  showScreen('fight');
+  sfxRoundStart();
+}
+
+function handleStoryMatchEnd(){
+  if (Game.matchWinnerSide === 0){
+    const stage = STORY[Game.story.stageIndex];
+    const proceedToNextStage = () => {
+      const nextIndex = Game.story.stageIndex + 1;
+      if (nextIndex < STORY.length){
+        Game.story.stageIndex = nextIndex;
+        showStoryDialogue(STORY[nextIndex].lines, ['blue_ronin', STORY[nextIndex].villainSkin], () => startStoryFight(nextIndex));
+      } else {
+        showStoryDialogue(STORY_ENDING, ['blue_ronin'], () => {
+          Game.story.active = false;
+          showScreen('select');
+        });
+      }
+    };
+    if (stage.postFightLines){
+      showStoryDialogue(stage.postFightLines, ['blue_ronin'], proceedToNextStage);
+    } else {
+      proceedToNextStage();
+    }
+  } else {
+    showScreen('story-defeat');
+  }
+}
+
+/* ============================================================
    BOOTSTRAP
    ============================================================ */
 function loadImages(){
@@ -1403,6 +1622,18 @@ document.getElementById('btn-fullscreen').addEventListener('click', () => {
 document.addEventListener('fullscreenchange', () => {
   document.getElementById('btn-fullscreen').textContent =
     document.fullscreenElement ? '⛶ EXIT FULLSCREEN' : '⛶ FULLSCREEN';
+});
+document.getElementById('btn-story').addEventListener('click', () => {
+  ensureAudio();
+  Game.story.active = true;
+  Game.story.stageIndex = 0;
+  showStoryDialogue(STORY_INTRO, ['blue_ronin'], () => {
+    showStoryDialogue(STORY[0].lines, ['blue_ronin', STORY[0].villainSkin], () => startStoryFight(0));
+  });
+});
+document.getElementById('btn-story-retry').addEventListener('click', () => {
+  ensureAudio();
+  startStoryFight(Game.story.stageIndex);
 });
 
 const STEP = 1000/60;
