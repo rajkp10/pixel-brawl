@@ -65,6 +65,7 @@ Three selectable stages, each drawn entirely with canvas primitives (gradients, 
 
 - **1 Player (vs CPU)** — you control the left fighter; the right one is CPU-driven. You still choose which character the CPU uses.
 - **2 Player (local)** — two people on one keyboard.
+- **Story Mode** — a fixed single-player campaign against the rest of the roster in sequence. See §14.
 
 The mode toggle only changes which input source drives the right-hand fighter. Both fighters are the same class running the same state machine, so a CPU opponent has access to exactly the moves, timings, and restrictions a human does — it gets no reach, damage, or speed advantages.
 
@@ -310,3 +311,47 @@ The select screen shows a **live-animating idle-pose preview** of all four chara
 - **Air attacks can't be re-thrown mid-jump.** Once an air attack finishes recovering, the fighter returns to the falling jump state — they can't chain a second one or double-jump out of it.
 - **Character identity is pure data, not new art.** Every trait (movement multipliers, damage/meter modifiers, the signature special's cost/timing/damage/speed) is a plain number on the character's entry in `SKINS` — no new animations, no new move types, no character-specific code branches scattered through the engine. The one exception is Night Ninja's "keeps moving while charging" trait, which is a single `freeMove` flag read in one place (`updateSpecial`).
 - **The signature special reuses the exact same charge→release→recovery pipeline for every character.** Only the numbers feeding it differ (cost, charge time, damage, projectile speed) — there's no per-character special-move logic to maintain.
+
+---
+
+## 14. Story Mode
+
+**"The Ronin's Path."** A fixed single-player campaign, entered via the **STORY MODE** button beside START FIGHT on the select screen. Blue Ronin's dojo has been broken into and its founding scroll stolen; he tracks it through three opponents in escalating difficulty for a Bruiser archetype (rushdown → technical → zoner, the classic hardest matchup for a slow, heavy character):
+
+| Stage | Villain | Arena |
+|---|---|---|
+| 1 | Street Fist | Sunset Docks |
+| 2 | Night Ninja | Dojo |
+| 3 | Voltage | Neon City |
+
+The hero and the villain order are fixed — there is no character or arena picker in Story Mode.
+
+### Architecture
+
+Story Mode is a thin narrative layer on top of the existing fight engine, not a parallel implementation. Starting a stage builds a normal `Fighter` for both sides and hands off to the same `showScreen('fight')` flow used by versus play — same round structure (best of three), same arenas, same AI, same input. The only new logic is a win/loss branch inserted at the exact point the engine already detects a match result:
+
+- **Win, not the final stage** → the next stage's pre-fight dialogue plays directly (no intermediate "you won" screen), then that stage's fight starts.
+- **Win, final stage** → an ending dialogue screen plays, then control returns to the select screen and story state resets.
+- **Loss** → a "DEFEATED" screen with a **RETRY** button that restarts only the current stage's fight (same villain, same arena) — no progress is lost and no dialogue replays.
+
+### Dialogue screens
+
+One screen (`#screen-story-dialogue`) is reused for the intro, all three pre-fight exchanges, every post-fight monologue, and the ending, in two layouts:
+
+- **Solo** (intro, post-fight monologues, ending) — one centered portrait, Blue Ronin only.
+- **Duo** (pre-fight exchanges) — two portraits side by side, hero left / villain right, matching the fight HUD's left/right convention. The villain's portrait is mirrored with a canvas transform so both characters visibly face each other rather than facing the same direction.
+
+Lines reveal with a typewriter effect (25 ms/character). Tapping the dialogue box while a line is still typing completes it instantly instead of advancing; tapping again moves to the next line, or — on the last line of the set — transitions to whatever comes next (a fight, the next dialogue set, or the select screen).
+
+Post-fight monologues bridge each victory before the next stage's dialogue begins, so the player learns *how* the trail continues rather than being dropped into the next fight with no transition.
+
+### Portraits
+
+Each dialogue line specifies which pose its speaker strikes, chosen per-line to match the line's content rather than defaulting to a character's idle stance. Poses are drawn from two sources:
+
+- The normal per-character `ANIM` table (e.g. `punch`, `idle`, `win`, `specialCharge`) — the same frames used in actual combat.
+- `STORY_EXTRA_FRAMES` — a small set of sprite-sheet rects that exist in every character's sheet but are **not** wired into any combat animation (found by scanning the sheet's alpha channel directly rather than trusting the animation table). This surfaces otherwise-unused art — an uppercut wind-up, a wide low stance, a palm-throw motion, a front-facing idle — for portraits without adding new art.
+
+### Explicitly out of scope
+
+No character or arena selection, no branching dialogue or choices, no skip button (a fixed linear line sequence, tap-to-advance only), and no save — closing the tab or returning to the select screen loses story progress, matching the rest of the game's lack of persistence.
