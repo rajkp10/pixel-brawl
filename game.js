@@ -532,7 +532,11 @@ window.addEventListener('pointercancel', releaseStrayTouchPointer);
 window.addEventListener('keydown', (e) => {
   ensureAudio();
   const k = e.key.toLowerCase();
-  if (k === 'escape') { goToSelect(); return; }
+  if (k === 'escape') {
+    if (document.getElementById('credits-overlay').classList.contains('open')) { closeCredits(); return; }
+    goToSelect();
+    return;
+  }
   if (['arrowup','arrowdown','arrowleft','arrowright'].includes(k)) e.preventDefault();
   pressKey(k);
 });
@@ -1634,6 +1638,14 @@ document.getElementById('btn-story').addEventListener('click', () => {
 document.getElementById('btn-story-retry').addEventListener('click', () => {
   ensureAudio();
   startStoryFight(Game.story.stageIndex);
+});
+
+function openCredits(){ document.getElementById('credits-overlay').classList.add('open'); }
+function closeCredits(){ document.getElementById('credits-overlay').classList.remove('open'); }
+document.getElementById('credits-link').addEventListener('click', openCredits);
+document.getElementById('credits-close').addEventListener('click', closeCredits);
+document.getElementById('credits-overlay').addEventListener('click', (e) => {
+  if (e.target.id === 'credits-overlay') closeCredits();
 });
 
 const STEP = 1000/60;

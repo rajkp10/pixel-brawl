@@ -295,6 +295,108 @@
         color: var(--text);
       }
 
+      /* ---- credits ---- */
+      #credits-link {
+        position: fixed;
+        right: 10px;
+        bottom: 10px;
+        z-index: 20;
+        background: var(--panel);
+        border: 1px solid var(--panel-border);
+        border-radius: 4px;
+        padding: 4px 8px;
+        font-family: inherit;
+        font-size: 0.62em;
+        letter-spacing: 1.5px;
+        color: var(--dim);
+        cursor: pointer;
+        opacity: 0.85;
+        transition: opacity 0.15s, color 0.15s, border-color 0.15s;
+      }
+      #credits-link:hover {
+        opacity: 1;
+        color: var(--accent);
+        border-color: var(--accent);
+      }
+      .credits-overlay {
+        display: none;
+        position: fixed;
+        inset: 0;
+        z-index: 30;
+        background: rgba(0, 0, 0, 0.72);
+        align-items: center;
+        justify-content: center;
+        padding: 16px;
+      }
+      .credits-overlay.open {
+        display: flex;
+      }
+      .credits-panel {
+        position: relative;
+        width: 100%;
+        max-width: 380px;
+        background: var(--panel);
+        border: 2px solid var(--panel-border);
+        border-radius: 8px;
+        padding: 24px 20px;
+        text-align: center;
+      }
+      .credits-panel h2 {
+        margin: 0 0 18px;
+        color: var(--accent);
+        letter-spacing: 3px;
+        font-size: 1em;
+      }
+      #credits-close {
+        position: absolute;
+        top: 8px;
+        right: 10px;
+        background: none;
+        border: none;
+        color: var(--dim);
+        font-size: 1.3em;
+        line-height: 1;
+        cursor: pointer;
+        padding: 4px;
+      }
+      #credits-close:hover {
+        color: var(--accent);
+      }
+      .credits-group {
+        margin-bottom: 18px;
+      }
+      .credits-group:last-child {
+        margin-bottom: 0;
+      }
+      .credits-label {
+        font-size: 0.68em;
+        letter-spacing: 2px;
+        color: var(--dim);
+        margin-bottom: 8px;
+      }
+      .credits-by {
+        font-size: 0.85em;
+        color: var(--text);
+        margin-bottom: 6px;
+      }
+      .credits-links {
+        display: flex;
+        justify-content: center;
+        flex-wrap: wrap;
+        gap: 10px 16px;
+      }
+      .credits-links a {
+        color: var(--accent);
+        text-decoration: none;
+        font-size: 0.8em;
+        letter-spacing: 0.5px;
+        border-bottom: 1px solid transparent;
+      }
+      .credits-links a:hover,
+      .credits-links a:focus-visible {
+        border-bottom-color: var(--accent);
+      }
+
       /* ---- fight screen ---- */
       #screen-fight {
         /* Width budget for .canvas-wrap so it fits within the viewport's
@@ -738,6 +840,30 @@
         </div>
         <div class="controls-hint">
           <div>Esc returns to this screen at any time</div>
+        </div>
+        <button id="credits-link">CREDITS</button>
+        <div id="credits-overlay" class="credits-overlay">
+          <div class="credits-panel">
+            <button id="credits-close" aria-label="Close credits">&times;</button>
+            <h2>CREDITS</h2>
+            <div class="credits-group">
+              <div class="credits-label">CHARACTER SPRITES</div>
+              <div class="credits-by">Asset Bakery</div>
+              <div class="credits-links">
+                <a href="https://assetbakery.itch.io/2d-fighter-3" target="_blank" rel="noopener">2D Fighter 3</a>
+                <a href="https://assetbakery.itch.io/-2d-fighter-4" target="_blank" rel="noopener">2D Fighter 4</a>
+                <a href="https://assetbakery.itch.io/2d-fighter-5" target="_blank" rel="noopener">2D Fighter 5</a>
+              </div>
+            </div>
+            <div class="credits-group">
+              <div class="credits-label">GAME &amp; CODE</div>
+              <div class="credits-by">Raj Patel</div>
+              <div class="credits-links">
+                <a href="https://github.com/rajkp10" target="_blank" rel="noopener">GitHub</a>
+                <a href="https://www.linkedin.com/in/rajpatelcs/" target="_blank" rel="noopener">LinkedIn</a>
+              </div>
+            </div>
+          </div>
         </div>
       </div>
 
