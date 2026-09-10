@@ -92,26 +92,39 @@
       * {
         box-sizing: border-box;
       }
-      html,
+      html {
+        height: 100%;
+      }
       body {
         margin: 0;
         padding: 0;
-        height: 100%;
+        min-height: 100%;
         background: var(--bg);
         color: var(--text);
         font-family: "Consolas", "Courier New", monospace;
         display: flex;
-        align-items: center;
+        align-items: safe center;
         justify-content: center;
-        overflow: hidden;
+        overflow-x: hidden;
         user-select: none;
+      }
+      /* Real phones keep the original app-shell behavior: the page itself
+         never scrolls or zooms (avoids mobile pinch/bounce quirks), and
+         #app is its own bounded, internally-scrolling box sized to the
+         visual viewport — which is what the fight screen's --fit-w sizing
+         and HUD overlay are tuned against. Desktop/mouse users instead get
+         normal page scrolling, so the scrollbar sits at the true window
+         edge instead of hugging #app's narrower centered column. */
+      body.touch-active {
+        height: 100%;
+        min-height: 0;
+        align-items: center;
+        overflow: hidden;
       }
       #app {
         width: 100%;
         max-width: 1000px;
-        max-height: 100dvh;
         padding: 8px;
-        overflow-y: auto;
       }
       .screen {
         display: none;
@@ -719,6 +732,13 @@
       body.touch-active .mode-toggle {
         display: none;
       }
+      body.touch-active #keyboard-controls-hint {
+        display: none;
+      }
+      body.touch-active #app {
+        max-height: 100dvh;
+        overflow-y: auto;
+      }
       .touch-btn {
         position: absolute;
         display: flex;
@@ -828,7 +848,7 @@
         </div>
         <button id="btn-fullscreen">⛶ FULLSCREEN</button>
         <div id="fullscreen-hint">Recommended for the best view</div>
-        <div class="controls-hint">
+        <div class="controls-hint" id="keyboard-controls-hint">
           <div>
             <b>P1</b> — WASD move/jump/crouch, Shift dash, J punch, K kick, L
             special
