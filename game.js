@@ -410,18 +410,43 @@ function sfxKO(){
   playNoiseHit({ duration:0.3, volume:0.4, filterFreq:900, decay:0.35 });
   playTone({ freqStart:160, freqEnd:40, duration:0.32, volume:0.28, type:'sawtooth' });
 }
-function sfxRoundStart(){
-  playTone({ freqStart:392, duration:0.09, volume:0.2, type:'square' });
-  setTimeout(() => playTone({ freqStart:523, duration:0.14, volume:0.22, type:'square' }), 90);
+/* ============================================================
+   VOICE LINES (recorded announcer clips)
+   ============================================================ */
+const VOICE_LINES = {
+  round1: 'assets/audio/round-1.mp3',
+  round2: 'assets/audio/round-2.mp3',
+  round3: 'assets/audio/round-3.mp3',
+  fight:  'assets/audio/fight.mp3',
+  win:    'assets/audio/win.mp3',
+  defeat: 'assets/audio/defeat.mp3',
+};
+const voiceBuffers = {};
+
+function loadVoiceLines(){
+  const Ctx = window.AudioContext || window.webkitAudioContext;
+  if (!Ctx) return Promise.resolve();
+  if (!audioCtx) audioCtx = new Ctx();
+  return Promise.all(Object.entries(VOICE_LINES).map(([key, url]) =>
+    fetch(url)
+      .then(r => r.arrayBuffer())
+      .then(data => audioCtx.decodeAudioData(data))
+      .then(buffer => { voiceBuffers[key] = buffer; })
+      .catch(err => console.error('Failed to load voice line: ' + key, err))
+  ));
 }
-function sfxRoundEnd(){
-  playTone({ freqStart:523, duration:0.1, volume:0.2, type:'triangle' });
-  setTimeout(() => playTone({ freqStart:659, duration:0.16, volume:0.22, type:'triangle' }), 100);
-}
-function sfxMatchEnd(){
-  playTone({ freqStart:523, duration:0.12, volume:0.22, type:'square' });
-  setTimeout(() => playTone({ freqStart:659, duration:0.12, volume:0.22, type:'square' }), 110);
-  setTimeout(() => playTone({ freqStart:784, duration:0.3, volume:0.26, type:'square' }), 220);
+
+function playVoice(key){
+  const ctx = ensureAudio();
+  const buffer = voiceBuffers[key];
+  if (!ctx || !buffer) return;
+  const src = ctx.createBufferSource();
+  src.buffer = buffer;
+  const gain = ctx.createGain();
+  gain.gain.value = 0.9;
+  src.connect(gain);
+  gain.connect(ctx.destination);
+  src.start();
 }
 
 /* ============================================================
@@ -982,7 +1007,12 @@ function applyHit(attacker, defender, table, g){
   checkKO(defender);
   if (defender.state === 'ko'){
     g.hitStopTimer = Math.max(g.hitStopTimer, HITSTOP_KO);
-    sfxKO();
+    // Skip the KO thud specifically when this blow decides the whole match —
+    // it would otherwise land right before the win/defeat voice line.
+    // Round-ending (but not match-ending) KOs keep the impact sound.
+    const attackerSide = attacker === g.p1 ? 0 : 1;
+    const matchEndingKO = g.wins[attackerSide] + 1 >= ROUNDS_TO_WIN;
+    if (!matchEndingKO) sfxKO();
   }
 }
 
@@ -1094,7 +1124,7 @@ const Game = {
   fightPhase: 'roundIntro', phaseTimer: 0,
   roundTime: ROUND_TIME,
   koHoldTimer: 0, shakeTimer: 0, hitStopTimer: 0,
-  roundWinnerSide: null, matchWinnerSide: null,
+  roundWinnerSide: null, matchWinnerSide: null, matchOverHoldMs: 0,
   story: { active: false, stageIndex: 0 },
 };
 
@@ -1133,7 +1163,7 @@ function startMatch(){
   resetForNewRound();
   Game.fightPhase = 'roundIntro'; Game.phaseTimer = 0;
   showScreen('fight');
-  sfxRoundStart();
+  playVoice('round' + Game.round);
 }
 
 function startRoundEnd(winnerSide){
@@ -1145,19 +1175,37 @@ function startRoundEnd(winnerSide){
     const winner = winnerSide === 0 ? Game.p1 : Game.p2;
     if (winner.state !== 'ko'){ winner.state = 'win'; winner.animFrames = ANIM.win; winner.animIndex = 0; }
   }
-  sfxRoundEnd();
 }
 
 function showPostmatch(){
   const winnerName = Game.matchWinnerSide === 0 ? Game.p1.name : Game.p2.name;
   document.getElementById('postmatch-title').textContent = winnerName.toUpperCase() + ' WINS!';
   showScreen('postmatch');
-  sfxMatchEnd();
 }
 
+// The round-intro hold lasts as long as the "Round N" announcement itself,
+// so fighting never opens up mid-announcement — FIGHT! only starts playing
+// once the "Round N" voice line has actually finished.
 function updateRoundIntro(step){
   Game.phaseTimer += step;
-  if (Game.phaseTimer >= ROUND_INTRO_MS) Game.fightPhase = 'fighting';
+  const introBuffer = voiceBuffers['round' + Game.round];
+  const introMs = introBuffer ? introBuffer.duration * 1000 : ROUND_INTRO_MS;
+  if (Game.phaseTimer >= introMs){
+    Game.fightPhase = 'fightCall';
+    Game.phaseTimer = 0;
+    playVoice('fight');
+  }
+}
+
+// Held separately from roundIntro so the game stays paused for the full
+// length of the FIGHT! voice line too, not just the round announcement.
+function updateFightCall(step){
+  Game.phaseTimer += step;
+  const buffer = voiceBuffers.fight;
+  const holdMs = buffer ? buffer.duration * 1000 : 0;
+  if (Game.phaseTimer >= holdMs){
+    Game.fightPhase = 'fighting';
+  }
 }
 
 function updateRoundEnd(step){
@@ -1166,17 +1214,36 @@ function updateRoundEnd(step){
     if (Game.wins[0] >= ROUNDS_TO_WIN || Game.wins[1] >= ROUNDS_TO_WIN){
       Game.matchWinnerSide = Game.wins[0] > Game.wins[1] ? 0 : 1;
       Game.fightPhase = 'matchOver';
-      if (Game.story.active){
-        handleStoryMatchEnd();
+      Game.phaseTimer = 0;
+
+      // Story Mode only gets a "win" voice on the campaign's final stage —
+      // an intermediate stage win moves straight into the next villain's
+      // dialogue, so there's nothing to announce yet.
+      let voiceKey = null;
+      if (Game.matchWinnerSide === 0){
+        if (!Game.story.active || Game.story.stageIndex + 1 >= STORY.length) voiceKey = 'win';
       } else {
-        showPostmatch();
+        voiceKey = 'defeat';
       }
+      if (voiceKey) playVoice(voiceKey);
+      const outcomeBuffer = voiceKey ? voiceBuffers[voiceKey] : null;
+      Game.matchOverHoldMs = outcomeBuffer ? outcomeBuffer.duration * 1000 : 0;
     } else {
       Game.round++;
       resetForNewRound();
       Game.fightPhase = 'roundIntro'; Game.phaseTimer = 0;
-      sfxRoundStart();
+      playVoice('round' + Game.round);
     }
+  }
+}
+
+// Holds on the fight screen until the win/defeat voice line finishes, then
+// hands off to whichever screen comes next — so the outcome sound plays
+// while the fight itself is still on screen, not over the rematch options.
+function updateMatchOver(step){
+  Game.phaseTimer += step;
+  if (Game.phaseTimer >= Game.matchOverHoldMs){
+    if (Game.story.active) handleStoryMatchEnd(); else showPostmatch();
   }
 }
 
@@ -1216,8 +1283,10 @@ function updateFightingTick(step){
 function update(step){
   switch (Game.fightPhase){
     case 'roundIntro': updateRoundIntro(step); break;
+    case 'fightCall': updateFightCall(step); break;
     case 'fighting': updateFightingTick(step); break;
     case 'roundEnd': updateRoundEnd(step); break;
+    case 'matchOver': updateMatchOver(step); break;
   }
   updateHUD();
   // Don't drop a just-pressed edge while frozen in hit-stop — let it survive to the tick that resumes input.
@@ -1270,11 +1339,18 @@ function updateHUD(){
   if (g.fightPhase === 'roundIntro'){
     banner.textContent = 'ROUND ' + g.round;
     banner.className = 'show';
+  } else if (g.fightPhase === 'fightCall'){
+    banner.textContent = 'FIGHT!';
+    banner.className = 'show';
   } else if (g.fightPhase === 'roundEnd'){
     const matchOver = g.wins[0] >= ROUNDS_TO_WIN || g.wins[1] >= ROUNDS_TO_WIN;
     const winnerName = g.roundWinnerSide === 0 ? g.p1.name : g.roundWinnerSide === 1 ? g.p2.name : null;
     if (matchOver) banner.textContent = winnerName ? (winnerName.toUpperCase() + ' WINS THE MATCH!') : 'DRAW!';
     else banner.textContent = winnerName ? (winnerName.toUpperCase() + ' WINS ROUND ' + g.round + '!') : 'DRAW ROUND!';
+    banner.className = 'show';
+  } else if (g.fightPhase === 'matchOver'){
+    const winnerName = g.matchWinnerSide === 0 ? g.p1.name : g.p2.name;
+    banner.textContent = winnerName.toUpperCase() + ' WINS THE MATCH!';
     banner.className = 'show';
   } else {
     banner.className = '';
@@ -1558,7 +1634,7 @@ function startStoryFight(stageIndex){
   Game.fightPhase = 'roundIntro';
   Game.phaseTimer = 0;
   showScreen('fight');
-  sfxRoundStart();
+  playVoice('round' + Game.round);
 }
 
 function handleStoryMatchEnd(){
@@ -1613,7 +1689,7 @@ document.getElementById('btn-rematch').addEventListener('click', () => {
   Game.wins = [0,0]; Game.round = 1;
   Game.fightPhase = 'roundIntro'; Game.phaseTimer = 0;
   showScreen('fight');
-  sfxRoundStart();
+  playVoice('round' + Game.round);
 });
 document.getElementById('btn-change').addEventListener('click', () => showScreen('select'));
 document.getElementById('btn-fullscreen').addEventListener('click', () => {
@@ -1672,7 +1748,7 @@ function loop(now){
 Game.ctx = document.getElementById('game-canvas').getContext('2d');
 Game.ctx.imageSmoothingEnabled = false;
 
-loadImages().then(() => {
+Promise.all([loadImages(), loadVoiceLines()]).then(() => {
   initSelectScreen();
   last = performance.now();
   requestAnimationFrame(loop);
