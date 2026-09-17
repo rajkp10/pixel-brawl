@@ -2,7 +2,7 @@
 
 A browser-based 2D fighting game built with pure HTML, CSS, and JavaScript — no framework, no build step, no backend, no dependencies.
 
-**Play it live:** https://playpixelbrawl.netlify.app/
+**Play it live:** https://playpixelbrawl.com/
 
 For the full breakdown of every mechanic, mode, and system, see [FEATURES.md](FEATURES.md).
 

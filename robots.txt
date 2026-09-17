@@ -1,4 +1,4 @@
 User-agent: *
 Allow: /
 
-Sitemap: https://playpixelbrawl.netlify.app/sitemap.xml
+Sitemap: https://playpixelbrawl.com/sitemap.xml
