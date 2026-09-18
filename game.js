@@ -452,9 +452,10 @@ function playVoice(key){
 /* ============================================================
    INPUT
    ============================================================ */
-const isMobileUA = /Android|iPhone|iPad|iPod|Mobile/i.test(navigator.userAgent);
-const isTouchDevice = window.matchMedia('(pointer: coarse)').matches && isMobileUA;
-if (isTouchDevice) document.body.classList.add('touch-active');
+// Detection itself (and adding the class) already happened in the inline
+// script at the top of <body>, before first paint — read the result here
+// instead of recomputing it, so there's one source of truth.
+const isTouchDevice = document.body.classList.contains('touch-active');
 
 let rotateGateShowing = false;
 function updateRotateGate(){

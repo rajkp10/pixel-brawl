@@ -222,6 +222,11 @@
         display: grid;
         grid-template-columns: repeat(2, 1fr);
         gap: 8px;
+        /* Reserves the grid's populated height up front — the 4 thumbs
+           (2 rows) are built by JS after the sprite sheets finish loading,
+           so without this the grid pops in from 0 height, causing layout
+           shift. Matches the measured height of a fully populated grid. */
+        min-height: 270px;
       }
       .thumb {
         display: flex;
@@ -241,15 +246,15 @@
         background: #1a1a24;
       }
       .thumb-label {
-        font-size: 0.65em;
+        font-size: 0.75em;
         letter-spacing: 1px;
         color: var(--dim);
         text-align: center;
       }
       .thumb-archetype {
-        font-size: 0.58em;
+        font-size: 0.75em;
         letter-spacing: 0.5px;
-        color: #5a5870;
+        color: #7d7aa0;
         text-align: center;
         margin-top: -3px;
       }
@@ -271,13 +276,17 @@
         gap: 10px;
       }
       .arena-label {
-        font-size: 0.7em;
+        font-size: 0.75em;
         letter-spacing: 2px;
         color: var(--dim);
       }
       .arena-thumbs {
         display: flex;
         gap: 8px;
+        /* Same reasoning as .thumbs above — reserves space for the 3
+           arena thumbnails JS builds after image load, so the row
+           doesn't pop in from 0 height. */
+        min-height: 82px;
       }
       .thumb.arena-thumb {
         padding: 3px;
@@ -289,7 +298,7 @@
         background: #0a0a10;
       }
       .thumb.arena-thumb .thumb-label {
-        font-size: 0.65em;
+        font-size: 0.75em;
       }
 
       #btn-start {
@@ -300,7 +309,7 @@
       .controls-hint {
         display: flex;
         gap: 40px;
-        font-size: 0.72em;
+        font-size: 0.75em;
         color: var(--dim);
         letter-spacing: 0.5px;
       }
@@ -319,15 +328,13 @@
         border-radius: 4px;
         padding: 4px 8px;
         font-family: inherit;
-        font-size: 0.62em;
+        font-size: 0.75em;
         letter-spacing: 1.5px;
         color: var(--dim);
         cursor: pointer;
-        opacity: 0.85;
-        transition: opacity 0.15s, color 0.15s, border-color 0.15s;
+        transition: color 0.15s, border-color 0.15s;
       }
       #credits-link:hover {
-        opacity: 1;
         color: var(--accent);
         border-color: var(--accent);
       }
@@ -724,7 +731,7 @@
       }
       body.touch-active #fullscreen-hint {
         display: block;
-        font-size: 0.7em;
+        font-size: 0.75em;
         color: var(--dim);
         letter-spacing: 0.5px;
         margin-top: -8px;
@@ -794,6 +801,17 @@
     </style>
   </head>
   <body>
+    <script>
+      // Runs before any content below is parsed/painted, so the
+      // touch-active layout (mode toggle hidden, touch controls shown,
+      // etc.) is correct from the very first frame instead of flipping
+      // right after paint, which Lighthouse counts as layout shift.
+      (function () {
+        var isMobileUA = /Android|iPhone|iPad|iPod|Mobile/i.test(navigator.userAgent);
+        var isTouchDevice = window.matchMedia('(pointer: coarse)').matches && isMobileUA;
+        if (isTouchDevice) document.body.classList.add('touch-active');
+      })();
+    </script>
     <noscript>
       <div
         style="
@@ -818,7 +836,7 @@
     <div id="rotate-gate">
       <p>Rotate your device to play</p>
     </div>
-    <div id="app">
+    <main id="app">
       <div id="screen-select" class="screen active">
         <h1>PIXEL BRAWL</h1>
         <div class="mode-toggle">
@@ -964,7 +982,7 @@
         <h1>DEFEATED</h1>
         <button id="btn-story-retry">RETRY</button>
       </div>
-    </div>
+    </main>
     <script src="game.js"></script>
   </body>
 </html>
