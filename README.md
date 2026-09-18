@@ -25,7 +25,8 @@ This site is deployed on **Netlify**, connected directly to this repository — 
 ## Credits
 
 - **Character sprites** — [2D Fighter 3](https://assetbakery.itch.io/2d-fighter-3), [2D Fighter 4](https://assetbakery.itch.io/-2d-fighter-4), and [2D Fighter 5](https://assetbakery.itch.io/2d-fighter-5) by [Asset Bakery](https://assetbakery.itch.io/), used under their free release terms.
-- **Everything else** — code, arenas, sound, and game design by **Raj Patel**.
+- **Announcer voice lines** — [SoundBiter](https://www.voicebosch.com/soundbiter/videogame) by **VoiceBosch**, used under their free/commercial-use terms.
+- **Everything else** — code, arenas, and game design by **Raj Patel**.
 
 ## License
 
